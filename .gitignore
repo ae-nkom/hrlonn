@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Vite/generated config artifacts
+vite.config.js
+vite.config.d.ts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment/local config
+.env
+.env.*
+!.env.example
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Temporary/cache folders
+tmp/
+temp/
+.cache/
+
+# Python/virtualenv leftovers
+venv/
+.venv/
+__pycache__/
+
+# Office lock files
+~$*
