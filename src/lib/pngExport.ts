@@ -24,10 +24,21 @@ type TableExportOptions = ExportImageOptions & {
 const powerpointWidth = 1920;
 const powerpointHeight = 1080;
 const defaultPadding = 56;
+const tableRowsPerImage = 50;
+const tableHeaderHeight = 34;
+const minTableColumnWidth = 56;
+const maxAutoTableColumnWidth = 320;
 
 function cleanFileName(filename: string) {
   const normalized = filename.trim().replace(/[\\/:*?"<>|]+/g, "-");
   return normalized.toLocaleLowerCase("nb-NO").endsWith(".png") ? normalized : `${normalized}.png`;
+}
+
+function fileNamePart(filename: string, partNumber: number, partCount: number) {
+  if (partCount <= 1) return filename;
+  const clean = cleanFileName(filename);
+  const suffix = ` - del ${String(partNumber).padStart(2, "0")} av ${String(partCount).padStart(2, "0")}`;
+  return clean.replace(/\.png$/i, `${suffix}.png`);
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -168,6 +179,37 @@ function drawClippedText(context: CanvasRenderingContext2D, text: string, x: num
   context.restore();
 }
 
+function tableColumnWidths({
+  context,
+  columns,
+  rows,
+  formatValue,
+  maxTableWidth,
+}: {
+  context: CanvasRenderingContext2D;
+  columns: TableColumn[];
+  rows: Array<Record<string, unknown>>;
+  formatValue: (columnKey: string, value: unknown) => string;
+  maxTableWidth: number;
+}) {
+  const desiredWidths = columns.map((column) => {
+    const maxWidth = column.width ?? maxAutoTableColumnWidth;
+    const values = rows.slice(0, 500).map((row) => formatValue(column.key, row[column.key]));
+    const measured = [column.header, ...values].reduce((max, value) => Math.max(max, context.measureText(value).width + 26), 0);
+    return Math.min(maxWidth, clamp(measured, minTableColumnWidth, maxWidth));
+  });
+  const desiredTotalWidth = desiredWidths.reduce((sum, value) => sum + value, 0);
+  if (desiredTotalWidth <= 0) return { columnWidths: [], tableWidth: 0 };
+  if (desiredTotalWidth <= maxTableWidth) {
+    return { columnWidths: desiredWidths, tableWidth: desiredTotalWidth };
+  }
+  const scale = maxTableWidth / desiredTotalWidth;
+  return {
+    columnWidths: desiredWidths.map((width) => width * scale),
+    tableWidth: maxTableWidth,
+  };
+}
+
 export async function exportTableToPng({
   filename,
   title,
@@ -181,12 +223,69 @@ export async function exportTableToPng({
   height = powerpointHeight,
   padding = defaultPadding,
 }: TableExportOptions) {
+  await document.fonts?.ready;
+
+  const metadataLines = [
+    subtitle,
+    ...metadata.map((item) => `${item.label}: ${item.value || "Alle"}`),
+  ].filter((line): line is string => Boolean(line));
+  const top = padding;
+  const bottom = height - padding;
+  const titleHeight = 42 + metadataLines.length * 22 + 18;
+  const tableTop = top + titleHeight;
+  const rowsPerImage = tableRowsPerImage;
+  const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerImage));
+  const pages = Array.from({ length: pageCount }, (_, pageIndex) => {
+    const start = pageIndex * rowsPerImage;
+    const pageRows = rows.slice(start, start + rowsPerImage);
+    const pageRowClassNames = rowClassNames.slice(start, start + rowsPerImage);
+    return {
+      pageIndex,
+      start,
+      pageRows,
+      pageRowClassNames,
+    };
+  });
+
+  for (const page of pages) {
+    await exportTablePageToPng({
+      filename: fileNamePart(filename, page.pageIndex + 1, pageCount),
+      title,
+      subtitle: pageCount > 1 ? `${subtitle ?? `${rows.length.toLocaleString("nb-NO")} rader`} - del ${page.pageIndex + 1} av ${pageCount}` : subtitle,
+      metadata,
+      columns,
+      rows: page.pageRows,
+      rowClassNames: page.pageRowClassNames,
+      widthRows: rows,
+      rowOffset: page.start,
+      formatValue,
+      width,
+      height,
+      padding,
+    });
+  }
+}
+
+async function exportTablePageToPng({
+  filename,
+  title,
+  subtitle,
+  metadata = [],
+  columns,
+  rows,
+  rowClassNames = [],
+  widthRows = rows,
+  rowOffset = 0,
+  formatValue = (_columnKey, value) => String(value ?? ""),
+  width = powerpointWidth,
+  height = powerpointHeight,
+  padding = defaultPadding,
+}: TableExportOptions & { rowOffset?: number; widthRows?: Array<Record<string, unknown>> }) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Kunne ikke lage 16:9-canvas for PNG-eksport.");
-  await document.fonts?.ready;
 
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
@@ -201,11 +300,11 @@ export async function exportTableToPng({
   ].filter((line): line is string => Boolean(line));
   const titleHeight = 42 + metadataLines.length * 22 + 18;
   const tableTop = top + titleHeight;
-  const tableWidth = right - left;
+  const maxTableWidth = right - left;
   const tableHeight = bottom - tableTop;
-  const headerHeight = rows.length > 80 ? 24 : 34;
-  const rowHeight = rows.length === 0 ? 32 : Math.min(32, Math.max(0.1, (tableHeight - headerHeight) / rows.length));
-  const cellFontSize = clamp(rowHeight * 0.46, 1, 15);
+  const headerHeight = tableHeaderHeight;
+  const rowHeight = rows.length === 0 ? 32 : Math.min(32, Math.max(1, (tableHeight - headerHeight) / rows.length));
+  const cellFontSize = clamp(rowHeight * 0.46, 10, 15);
   const headerFontSize = clamp(Math.max(cellFontSize + 1, headerHeight * 0.42), 3, 15);
 
   context.textBaseline = "middle";
@@ -219,14 +318,13 @@ export async function exportTableToPng({
   });
 
   context.font = `${cellFontSize}px Inter, Arial, sans-serif`;
-  const desiredWidths = columns.map((column) => {
-    if (column.width) return column.width;
-    const values = rows.slice(0, 250).map((row) => formatValue(column.key, row[column.key]));
-    const measured = [column.header, ...values].reduce((max, value) => Math.max(max, context.measureText(value).width + 26), 0);
-    return clamp(measured, 80, 320);
+  const { columnWidths, tableWidth } = tableColumnWidths({
+    context,
+    columns,
+    rows: widthRows,
+    formatValue,
+    maxTableWidth,
   });
-  const totalDesiredWidth = desiredWidths.reduce((sum, value) => sum + value, 0) || 1;
-  const columnWidths = desiredWidths.map((value) => (value / totalDesiredWidth) * tableWidth);
 
   context.fillStyle = "#1f6f8b";
   context.fillRect(left, tableTop, tableWidth, headerHeight);
@@ -243,7 +341,7 @@ export async function exportTableToPng({
   context.font = `${cellFontSize}px Inter, Arial, sans-serif`;
   rows.forEach((row, rowIndex) => {
     const y = tableTop + headerHeight + rowIndex * rowHeight;
-    context.fillStyle = rowBackground(rowClassNames[rowIndex], rowIndex);
+    context.fillStyle = rowBackground(rowClassNames[rowIndex], rowOffset + rowIndex);
     context.fillRect(left, y, tableWidth, rowHeight);
     context.fillStyle = "#18232b";
     x = left;
