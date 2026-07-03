@@ -30,12 +30,20 @@ const filterColumnLabels: Record<keyof Filters, string> = {
 type PresentationView = "tables" | "salary" | "development" | "external";
 const pageStorageKey = "hr-lonn:selected-page";
 const presentationViewStorageKey = "hr-lonn:presentation-view";
+const sidebarCollapsedStorageKey = "hr-lonn:sidebar-collapsed";
 const validPages: Page[] = ["datagrunnlag", "oversikt", "kildedata", "lonn", "lonnsniva", "presentasjon"];
 const validPresentationViews: PresentationView[] = ["tables", "salary", "development", "external"];
 
 function storedValue<T extends string>(key: string, validValues: T[], fallback: T): T {
   const value = window.localStorage.getItem(key);
   return value && validValues.includes(value as T) ? (value as T) : fallback;
+}
+
+function storedBoolean(key: string, fallback: boolean): boolean {
+  const value = window.localStorage.getItem(key);
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return fallback;
 }
 
 const developmentColumnWidths = {
@@ -411,6 +419,7 @@ function App() {
   const [salaryLevelFilters, setSalaryLevelFilters] = useState<Filters>(emptyFilters);
   const [presentationFilters, setPresentationFilters] = useState<Filters>(emptyFilters);
   const [presentationView, setPresentationView] = useState<PresentationView>(() => storedValue(presentationViewStorageKey, validPresentationViews, "tables"));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => storedBoolean(sidebarCollapsedStorageKey, false));
 
   const model = useMemo(() => (bundle ? buildModel(bundle) : null), [bundle]);
   const allRows = useMemo(() => model?.analysis ?? [], [model]);
@@ -463,6 +472,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(presentationViewStorageKey, presentationView);
   }, [presentationView]);
+
+  useEffect(() => {
+    window.localStorage.setItem(sidebarCollapsedStorageKey, String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   async function handleUpload(files: UploadFilePatch) {
     setBusy(true);
@@ -529,8 +542,8 @@ function App() {
   const status = bundle ? `Status: ${bundle.sources.sap_raw?.name ?? "Lagret datagrunnlag"}` : "Status: Ingen data lastet";
 
   return (
-    <div className="app">
-      <Sidebar page={page} setPage={setPage} status={status} />
+    <div className={sidebarCollapsed ? "app sidebar-collapsed" : "app"}>
+      <Sidebar page={page} setPage={setPage} status={status} collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed((current) => !current)} />
       <main>
         {error ? <div className="error-box">{error}</div> : null}
         {page === "datagrunnlag" ? (

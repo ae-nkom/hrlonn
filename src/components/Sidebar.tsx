@@ -1,4 +1,4 @@
-import { BarChart3, Database, FileChartColumn, LayoutDashboard, TrendingUp, Upload } from "lucide-react";
+import { BarChart3, Database, FileChartColumn, LayoutDashboard, PanelLeftClose, PanelLeftOpen, TrendingUp, Upload } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type Page = "datagrunnlag" | "oversikt" | "kildedata" | "lonn" | "lonnsniva" | "presentasjon";
@@ -16,24 +16,33 @@ export function Sidebar({
   page,
   setPage,
   status,
+  collapsed,
+  onToggleCollapsed,
 }: {
   page: Page;
   setPage: (page: Page) => void;
   status: string;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }) {
   return (
-    <aside className="sidebar">
-      <div className="brand">
-        <span>HR</span>
-        <strong>lønn</strong>
+    <aside className={collapsed ? "sidebar collapsed" : "sidebar"}>
+      <div className="sidebar-top">
+        <div className="brand" aria-hidden={collapsed}>
+          <span>HR</span>
+          <strong>lønn</strong>
+        </div>
+        <button className="sidebar-toggle" type="button" onClick={onToggleCollapsed} aria-label={collapsed ? "Vis venstremeny" : "Skjul venstremeny"} title={collapsed ? "Vis venstremeny" : "Skjul venstremeny"}>
+          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+        </button>
       </div>
       <nav>
         {pages.map((item) => {
           const Icon = item.icon;
           return (
-            <button className={page === item.id ? "active" : ""} onClick={() => setPage(item.id)} key={item.id}>
+            <button className={page === item.id ? "active" : ""} onClick={() => setPage(item.id)} key={item.id} title={item.label} aria-label={item.label}>
               <Icon size={18} />
-              {item.label}
+              <span>{item.label}</span>
             </button>
           );
         })}

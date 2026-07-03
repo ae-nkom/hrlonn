@@ -28,19 +28,32 @@ button {
 .app {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
+}
+
+.app.sidebar-collapsed {
+  grid-template-columns: 68px minmax(0, 1fr);
 }
 
 .sidebar {
   position: sticky;
   top: 0;
   height: 100vh;
-  padding: 28px 20px;
+  padding: 24px 14px;
   background: #ffffff;
   border-right: 1px solid #dce4ea;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 22px;
+  min-width: 0;
+}
+
+.sidebar-top {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .brand {
@@ -60,6 +73,23 @@ button {
   font-weight: 500;
 }
 
+.sidebar-toggle {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border: 1px solid #cad4dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f5368;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-toggle:hover {
+  background: #e8f2f5;
+}
+
 nav {
   display: grid;
   gap: 6px;
@@ -76,6 +106,14 @@ nav button {
   background: transparent;
   color: #384753;
   text-align: left;
+  min-width: 0;
+}
+
+nav button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 nav button.active,
@@ -89,6 +127,38 @@ nav button:hover {
   font-size: 13px;
   color: #52616b;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sidebar.collapsed {
+  padding: 18px 10px;
+  align-items: center;
+}
+
+.sidebar.collapsed .sidebar-top {
+  justify-content: center;
+}
+
+.sidebar.collapsed .brand,
+.sidebar.collapsed .status-line,
+.sidebar.collapsed nav button span {
+  display: none;
+}
+
+.sidebar.collapsed nav {
+  width: 100%;
+  justify-items: center;
+}
+
+.sidebar.collapsed nav button {
+  width: 42px;
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  width: 42px;
+  height: 42px;
 }
 
 main {
