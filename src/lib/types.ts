@@ -34,6 +34,7 @@ export type Filters = {
   Seksjon: string[];
   Tariff: string[];
   Fagforening: string[];
+  stilling: string[];
 };
 
 export type Metric = {

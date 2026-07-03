@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 import ReactECharts from "echarts-for-react";
 import { Download } from "lucide-react";
 import { formatInt, mean, toNumber, uniqueSorted } from "../lib/format";
+import { pngFilenameFromExportFilename } from "../lib/pngExport";
 import type { Row } from "../lib/types";
 import { exportRowsToXlsx, type ExportMetadata } from "../lib/xlsxExport";
+import { PngExportButton } from "./PngExportButton";
 
 type DataPoint = {
   name: string;
@@ -11,6 +13,36 @@ type DataPoint = {
   count: number;
   row?: Row;
 };
+
+function chartImageDataUrl(ref: RefObject<ReactECharts>) {
+  return ref.current?.getEchartsInstance().getDataURL({
+    type: "png",
+    pixelRatio: 3,
+    backgroundColor: "#ffffff",
+  });
+}
+
+function ChartExportActions({
+  exportFilename,
+  exporting,
+  onExcelExport,
+  chartRef,
+}: {
+  exportFilename?: string;
+  exporting: boolean;
+  onExcelExport: () => void;
+  chartRef: RefObject<ReactECharts>;
+}) {
+  if (!exportFilename) return null;
+  return (
+    <div className="chart-export-actions" data-png-exclude="true">
+      <button className="chart-export-button" disabled={exporting} onClick={onExcelExport} aria-label={exporting ? "Lager Excel" : "Eksporter Excel"} title="Eksporter Excel">
+        <Download size={16} />
+      </button>
+      <PngExportButton className="chart-export-button" getImageDataUrl={() => chartImageDataUrl(chartRef)} filename={pngFilenameFromExportFilename(exportFilename)} />
+    </div>
+  );
+}
 
 function numericSalaryValues(values: unknown[]) {
   return values.map(toNumber).filter((value): value is number => value !== null && value > 0);
@@ -159,6 +191,7 @@ export function BarChart({
   exportMetadata?: ExportMetadata[];
 }) {
   const [exporting, setExporting] = useState(false);
+  const chartRef = useRef<ReactECharts>(null);
   const groupedData: DataPoint[] = aggregate ? groupedMean(rows, groupColumn, valueColumn, maxRows).map((item) => ({ ...item, row: undefined })) : rowValues(rows, groupColumn, valueColumn);
   const total = includeTotal ? totalMean(rows, valueColumn) : null;
   const data = total ? [total, ...groupedData] : groupedData;
@@ -193,13 +226,9 @@ export function BarChart({
 
   return (
     <section className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"}>
-      {exportFilename ? (
-        <button className="chart-export-button" disabled={exporting} onClick={handleExport}>
-          <Download size={16} />
-          {exporting ? "Lager Excel" : "Eksporter Excel"}
-        </button>
-      ) : null}
+      <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
+        ref={chartRef}
         style={{ height: Math.max(360, data.length * 28) }}
         option={{
           title: { text: title, left: 0, top: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
@@ -301,6 +330,7 @@ export function ColumnChart({
   exportMetadata?: ExportMetadata[];
 }) {
   const [exporting, setExporting] = useState(false);
+  const chartRef = useRef<ReactECharts>(null);
   const total = includeTotal ? totalMean(rows, valueColumn) : null;
   const data = total ? [total, ...groupedMeanInOrder(rows, groupColumn, valueColumn, order)] : groupedMeanInOrder(rows, groupColumn, valueColumn, order);
   const values = data.map((item) => item.value);
@@ -334,13 +364,9 @@ export function ColumnChart({
 
   return (
     <section className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"}>
-      {exportFilename ? (
-        <button className="chart-export-button" disabled={exporting} onClick={handleExport}>
-          <Download size={16} />
-          {exporting ? "Lager Excel" : "Eksporter Excel"}
-        </button>
-      ) : null}
+      <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
+        ref={chartRef}
         style={{ height: 360 }}
         option={{
           title: { text: title, left: 0, top: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
@@ -418,6 +444,7 @@ export function GroupedBarChart({
   exportMetadata?: ExportMetadata[];
 }) {
   const [exporting, setExporting] = useState(false);
+  const chartRef = useRef<ReactECharts>(null);
   const groups = (order ? order.filter((name) => rows.some((row) => String(row[groupColumn] ?? "") === name)) : uniqueSorted(rows.map((row) => row[groupColumn]))).slice(0, 18);
   const seriesNames = uniqueSorted(rows.map((row) => row[seriesColumn]));
   const exportRows = groups.flatMap((group) =>
@@ -513,13 +540,9 @@ export function GroupedBarChart({
 
   return (
     <section className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"}>
-      {exportFilename ? (
-        <button className="chart-export-button" disabled={exporting} onClick={handleExport}>
-          <Download size={16} />
-          {exporting ? "Lager Excel" : "Eksporter Excel"}
-        </button>
-      ) : null}
+      <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
+        ref={chartRef}
         notMerge
         style={{ height: orientation === "vertical" ? 390 : Math.max(390, groups.length * 34) }}
         option={{
@@ -561,6 +584,7 @@ export function YearGenderTrendChart({
 }) {
   const [sortBySalary, setSortBySalary] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const chartRef = useRef<ReactECharts>(null);
   const years = Array.from(
     new Set(
       rows
@@ -635,13 +659,9 @@ export function YearGenderTrendChart({
           Synkende lønn
         </button>
       </div>
-      {exportFilename ? (
-        <button className="chart-export-button chart-export-under-toggle" disabled={exporting} onClick={handleExport}>
-          <Download size={16} />
-          {exporting ? "Lager Excel" : "Eksporter Excel"}
-        </button>
-      ) : null}
+      <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
+        ref={chartRef}
         notMerge
         style={{ height: 390 }}
         option={{
@@ -715,6 +735,7 @@ export function ExternalSalaryDevelopmentChart({
 }) {
   const [selectedAgreement, setSelectedAgreement] = useState("Akademikerne/Unio");
   const [exporting, setExporting] = useState(false);
+  const chartRef = useRef<ReactECharts>(null);
   const data = rows
     .filter((row) => row["Avtale"] === selectedAgreement)
     .sort((a, b) => Number(b["Lønn 2026"] ?? 0) - Number(b["Lønn 2021"] ?? 0) - (Number(a["Lønn 2026"] ?? 0) - Number(a["Lønn 2021"] ?? 0)));
@@ -763,13 +784,9 @@ export function ExternalSalaryDevelopmentChart({
           LO Stat
         </button>
       </div>
-      {exportFilename ? (
-        <button className="chart-export-button chart-export-under-toggle" disabled={exporting} onClick={handleExport}>
-          <Download size={16} />
-          {exporting ? "Lager Excel" : "Eksporter Excel"}
-        </button>
-      ) : null}
+      <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
+        ref={chartRef}
         notMerge
         style={{ height: Math.max(420, data.length * 54 + 120) }}
         option={{
@@ -899,6 +916,7 @@ export function ExternalComparisonToggleChart({
 }) {
   const [selectedAgreement, setSelectedAgreement] = useState("Akademikerne/Unio");
   const [exporting, setExporting] = useState(false);
+  const chartRef = useRef<ReactECharts>(null);
   const data = rows
     .filter((row) => row["Avtale"] === selectedAgreement)
     .map((row) => ({
@@ -941,13 +959,9 @@ export function ExternalComparisonToggleChart({
           LO Stat
         </button>
       </div>
-      {exportFilename ? (
-        <button className="chart-export-button chart-export-under-toggle" disabled={exporting} onClick={handleExport}>
-          <Download size={16} />
-          {exporting ? "Lager Excel" : "Eksporter Excel"}
-        </button>
-      ) : null}
+      <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
+        ref={chartRef}
         notMerge
         style={{ height: Math.max(500, data.length * 30 + 96) }}
         option={{
@@ -1006,6 +1020,7 @@ export function MatrixTable({
   exportMetadata?: ExportMetadata[];
 }) {
   const [exporting, setExporting] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
   const rowNames = uniqueSorted(rows.map((row) => matrixGroupValue(row[rowColumn]))).slice(0, limitRows);
   const columnNames = uniqueSorted(rows.map((row) => row[columnColumn]));
   const matrixRows = rowNames
@@ -1083,17 +1098,19 @@ export function MatrixTable({
   }
 
   return (
-    <section className="matrix-panel">
+    <section className="matrix-panel" ref={sectionRef}>
       <div className="table-toolbar">
         <div>
           <h2>{title}</h2>
           <span>Gjennomsnittlig årslønn</span>
         </div>
         {exportFilename ? (
-          <button className="table-export-button" disabled={exporting} onClick={handleExport}>
-            <Download size={16} />
-            {exporting ? "Lager Excel" : "Eksporter Excel"}
-          </button>
+          <div className="table-actions" data-png-exclude="true">
+            <button className="table-export-button" disabled={exporting} onClick={handleExport} aria-label={exporting ? "Lager Excel" : "Eksporter Excel"} title="Eksporter Excel">
+              <Download size={16} />
+            </button>
+            <PngExportButton className="table-export-button" targetRef={sectionRef} filename={pngFilenameFromExportFilename(exportFilename)} />
+          </div>
         ) : null}
       </div>
       <div className="mini-chart-grid" aria-label={`${title}. ${rowColumn} fordelt på ${columnColumn}`}>
@@ -1129,6 +1146,7 @@ export function MatrixTable({
 
 export function DistributionChart({ rows, exportFilename, exportMetadata = [] }: { rows: Row[]; exportFilename?: string; exportMetadata?: ExportMetadata[] }) {
   const [exporting, setExporting] = useState(false);
+  const chartRef = useRef<ReactECharts>(null);
   const groups = groupedMean(rows, "Aldersgruppe", "arslonn", 12);
   const countsByGroup = new Map(groups.map((item) => [item.name, item.count]));
 
@@ -1159,13 +1177,9 @@ export function DistributionChart({ rows, exportFilename, exportMetadata = [] }:
 
   return (
     <section className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"}>
-      {exportFilename ? (
-        <button className="chart-export-button" disabled={exporting} onClick={handleExport}>
-          <Download size={16} />
-          {exporting ? "Lager Excel" : "Eksporter Excel"}
-        </button>
-      ) : null}
+      <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
+        ref={chartRef}
         style={{ height: 360 }}
         option={{
           title: { text: "Lønnsnivå etter alder", left: 0, textStyle: { fontSize: 17, fontWeight: 650 } },

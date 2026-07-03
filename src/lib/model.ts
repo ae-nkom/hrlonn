@@ -266,5 +266,6 @@ export function filterOptions(rows: Row[]): Filters {
     Seksjon: uniqueSorted(rows.map((row) => row["Seksjon"])),
     Tariff: uniqueSorted(rows.map((row) => row["Tariff"])),
     Fagforening: uniqueSorted(rows.map((row) => row["Fagforening"])),
+    stilling: uniqueSorted(rows.map((row) => row["stilling"])),
   };
 }

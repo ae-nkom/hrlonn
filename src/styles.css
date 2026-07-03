@@ -124,7 +124,7 @@ main {
 
 .page-filter-bar {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   position: relative;
   z-index: 3;
@@ -496,6 +496,16 @@ main {
 
 .with-chart-export {
   position: relative;
+  padding-top: 48px;
+}
+
+.chart-export-actions {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  z-index: 1;
+  display: inline-flex;
+  gap: 8px;
 }
 
 .chart-export-button {
@@ -503,18 +513,23 @@ main {
   top: 14px;
   right: 18px;
   z-index: 1;
+  width: 38px;
   min-height: 34px;
   border: 1px solid #cad4dd;
   border-radius: 6px;
   background: #ffffff;
   color: #0f5368;
-  padding: 0 11px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
   font-weight: 700;
-  white-space: nowrap;
+}
+
+.chart-export-actions .chart-export-button {
+  position: static;
+  top: auto;
+  right: auto;
 }
 
 .chart-export-button:hover {
@@ -546,7 +561,7 @@ main {
 }
 
 .with-chart-toggle.with-chart-export .chart-sort-toggle {
-  right: 198px;
+  right: 112px;
 }
 
 .chart-sort-toggle button {
@@ -619,18 +634,114 @@ main {
 }
 
 .table-export-button {
+  width: 38px;
   min-height: 38px;
   border: 1px solid #cad4dd;
   border-radius: 6px;
   background: #ffffff;
   color: #0f5368;
-  padding: 0 12px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   font-weight: 700;
-  white-space: nowrap;
+}
+
+.column-menu {
+  position: relative;
+}
+
+.column-menu summary {
+  width: 38px;
+  min-height: 38px;
+  list-style: none;
+  border: 1px solid #cad4dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f5368;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.column-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.column-menu summary:hover {
+  background: #e8f2f5;
+}
+
+.column-menu summary span {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #bd5b18;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.column-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 280px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid #cad4dd;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 16px 34px rgba(24, 35, 43, 0.16);
+  padding: 10px;
+}
+
+.column-menu-panel strong {
+  display: block;
+  margin: 2px 4px 8px;
+  color: #243542;
+  font-size: 13px;
+}
+
+.column-menu-panel p {
+  margin: 0;
+  color: #5d6d78;
+  font-size: 13px;
+}
+
+.column-menu-panel button {
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #18232b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.column-menu-panel button:hover {
+  background: #e8f2f5;
+}
+
+.column-menu-panel .show-all-columns {
+  margin-top: 8px;
+  justify-content: center;
+  color: #0f5368;
+  font-weight: 700;
 }
 
 .table-export-button:hover {
@@ -685,6 +796,46 @@ main {
   font-weight: 680;
   user-select: none;
   cursor: pointer;
+}
+
+.column-header-label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.column-header-label > span,
+.column-header-label > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.column-hide-button {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #6b7b86;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+}
+
+.column-hide-button:hover {
+  background: #dfeaf0;
+  color: #0f5368;
+  opacity: 1;
+}
+
+.column-hide-button:disabled {
+  color: #b4c0c8;
+  cursor: not-allowed;
 }
 
 .virtual-table tbody {

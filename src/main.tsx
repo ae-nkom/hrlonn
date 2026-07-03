@@ -17,8 +17,16 @@ import type { Filters, Row, StoredBundle, UploadFilePatch } from "./lib/types";
 import type { ExportMetadata } from "./lib/xlsxExport";
 import "./styles.css";
 
-const emptyFilters: Filters = { Avdeling: [], Seksjon: [], Tariff: [], Fagforening: [] };
+const emptyFilters: Filters = { Avdeling: [], Seksjon: [], Tariff: [], Fagforening: [], stilling: [] };
 const filterColumns: Array<keyof Filters> = ["Avdeling", "Seksjon", "Tariff", "Fagforening"];
+const presentationFilterColumns: Array<keyof Filters> = [...filterColumns, "stilling"];
+const filterColumnLabels: Record<keyof Filters, string> = {
+  Avdeling: "Avdeling",
+  Seksjon: "Seksjon",
+  Tariff: "Tariff",
+  Fagforening: "Fagforening",
+  stilling: "Stilling",
+};
 type PresentationView = "tables" | "salary" | "development" | "external";
 const pageStorageKey = "hr-lonn:selected-page";
 const presentationViewStorageKey = "hr-lonn:presentation-view";
@@ -55,11 +63,11 @@ function deviationRowClassName(row: Row) {
 }
 
 function filterExportMetadata(filters: Filters): ExportMetadata[] {
-  return filterColumns.flatMap((column) => {
+  return presentationFilterColumns.flatMap((column) => {
     const values = filters[column].filter(Boolean);
     if (values.length === 0) return [];
     const value = values.includes(noFilterSelection) ? "Ingen verdi" : values.join(", ");
-    return [{ label: `Filter ${column}`, value }];
+    return [{ label: `Filter ${filterColumnLabels[column]}`, value }];
   });
 }
 const hiddenAppColumns = [
@@ -317,28 +325,29 @@ function MultiSelectDropdown({
   );
 }
 
-function relevantFilterOptions(rows: Row[], filters: Filters): Filters {
+function relevantFilterOptions(rows: Row[], filters: Filters, columns: Array<keyof Filters> = filterColumns): Filters {
   return Object.fromEntries(
-    filterColumns.map((column) => {
+    columns.map((column) => {
       const otherFilters = { ...filters, [column]: [] };
       return [column, filterOptions(filterRows(rows, otherFilters))[column]];
     }),
   ) as Filters;
 }
 
-function normalizeFilters(rows: Row[], filters: Filters): Filters {
+function normalizeFilters(rows: Row[], filters: Filters, columns: Array<keyof Filters> = filterColumns): Filters {
   let next = filters;
-  for (let index = 0; index < filterColumns.length; index += 1) {
-    const options = relevantFilterOptions(rows, next);
+  for (let index = 0; index < columns.length; index += 1) {
+    const options = relevantFilterOptions(rows, next, columns);
     const normalized = Object.fromEntries(
-      filterColumns.map((column) => {
+      columns.map((column) => {
         const selected = next[column];
         if (selected.includes(noFilterSelection)) return [column, selected];
         return [column, selected.filter((value) => options[column].includes(value))];
       }),
     ) as Filters;
-    if (filterColumns.every((column) => normalized[column].join("\u0000") === next[column].join("\u0000"))) break;
-    next = normalized;
+    const merged = { ...next, ...normalized };
+    if (columns.every((column) => merged[column].join("\u0000") === next[column].join("\u0000"))) break;
+    next = merged;
   }
   return next;
 }
@@ -350,6 +359,7 @@ function FilterBar({
   onReset,
   disabled = false,
   disabledMessage,
+  columns = filterColumns,
 }: {
   options: Filters;
   filters: Filters;
@@ -357,14 +367,21 @@ function FilterBar({
   onReset: () => void;
   disabled?: boolean;
   disabledMessage?: string;
+  columns?: Array<keyof Filters>;
 }) {
   return (
     <section className={`filter-section ${disabled ? "disabled" : ""}`} aria-label="Filter for lønnsutvikling">
       <div className="page-filter-bar">
-        <MultiSelectDropdown label="Avdeling" values={options.Avdeling} selected={filters.Avdeling} onChange={(next) => setFilters({ ...filters, Avdeling: next })} disabled={disabled} />
-        <MultiSelectDropdown label="Seksjon" values={options.Seksjon} selected={filters.Seksjon} onChange={(next) => setFilters({ ...filters, Seksjon: next })} disabled={disabled} />
-        <MultiSelectDropdown label="Tariff" values={options.Tariff} selected={filters.Tariff} onChange={(next) => setFilters({ ...filters, Tariff: next })} disabled={disabled} />
-        <MultiSelectDropdown label="Fagforening" values={options.Fagforening} selected={filters.Fagforening} onChange={(next) => setFilters({ ...filters, Fagforening: next })} disabled={disabled} />
+        {columns.map((column) => (
+          <MultiSelectDropdown
+            key={column}
+            label={filterColumnLabels[column]}
+            values={options[column]}
+            selected={filters[column]}
+            onChange={(next) => setFilters({ ...filters, [column]: next })}
+            disabled={disabled}
+          />
+        ))}
       </div>
       {disabled && disabledMessage ? <div className="filter-disabled-message">{disabledMessage}</div> : null}
       <button className="reset-filters" type="button" onClick={onReset} disabled={disabled}>
@@ -405,7 +422,7 @@ function App() {
   const salaryLevelOptions = useMemo(() => relevantFilterOptions(overviewRows, salaryLevelFilters), [overviewRows, salaryLevelFilters]);
   const salaryLevelRows = useMemo(() => filterRows(overviewRows, salaryLevelFilters), [overviewRows, salaryLevelFilters]);
   const salaryLevelExportMetadata = useMemo(() => filterExportMetadata(salaryLevelFilters), [salaryLevelFilters]);
-  const presentationOptions = useMemo(() => relevantFilterOptions(overviewRows, presentationFilters), [overviewRows, presentationFilters]);
+  const presentationOptions = useMemo(() => relevantFilterOptions(overviewRows, presentationFilters, presentationFilterColumns), [overviewRows, presentationFilters]);
   const presentationRows = useMemo(() => filterRows(overviewRows, presentationFilters), [overviewRows, presentationFilters]);
   const presentationExportMetadata = useMemo(() => filterExportMetadata(presentationFilters), [presentationFilters]);
   const developmentChartRows = useMemo(
@@ -496,7 +513,7 @@ function App() {
   }
 
   function updatePresentationFilters(next: Filters) {
-    setPresentationFilters(normalizeFilters(overviewRows, next));
+    setPresentationFilters(normalizeFilters(overviewRows, next, presentationFilterColumns));
   }
 
   function handleClear() {
@@ -676,6 +693,7 @@ function PresentationPage({
         setFilters={setFilters}
         onReset={onResetFilters}
         disabled={view === "external"}
+        columns={presentationFilterColumns}
       />
       <div className="presentation-controls">
         <button className={view === "tables" ? "active" : ""} onClick={() => setView("tables")}>Etterslepstabeller</button>

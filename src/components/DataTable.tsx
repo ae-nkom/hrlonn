@@ -8,11 +8,13 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Download, Search } from "lucide-react";
+import { Columns3, Download, Eye, EyeOff, Search } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { formatInt, toNumber } from "../lib/format";
+import { exportTableToPng, pngFilenameFromExportFilename } from "../lib/pngExport";
 import type { Row } from "../lib/types";
 import { exportRowsToXlsx, type ExportMetadata } from "../lib/xlsxExport";
+import { PngExportButton } from "./PngExportButton";
 
 type Props = {
   rows: Row[];
@@ -104,8 +106,9 @@ export function DataTable({
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [exporting, setExporting] = useState(false);
+  const [hiddenColumnIds, setHiddenColumnIds] = useState<string[]>([]);
   const parentRef = useRef<HTMLDivElement>(null);
-  const columns = useMemo(() => {
+  const allColumns = useMemo(() => {
     const hidden = new Set(hiddenColumns);
     const names = Array.from(new Set(rows.flatMap((row) => Object.keys(row)))).filter((name) => !hidden.has(name));
     const filtered = names;
@@ -130,10 +133,16 @@ export function DataTable({
       };
     });
   }, [columnOrder, columnLabels, hiddenColumns, rows]);
+  const validHiddenColumnIds = hiddenColumnIds.filter((columnId) => allColumns.some((column) => String(column.id) === columnId));
+  const visibleColumns = allColumns.filter((column) => !validHiddenColumnIds.includes(String(column.id)));
+  const hiddenColumnLabels = validHiddenColumnIds.map((columnId) => ({
+    id: columnId,
+    label: columnLabels[columnId] ?? columnId,
+  }));
 
   const table = useReactTable({
     data: rows,
-    columns,
+    columns: visibleColumns,
     state: { globalFilter, sorting },
     onGlobalFilterChange: setGlobalFilter,
     onSortingChange: setSorting,
@@ -144,15 +153,22 @@ export function DataTable({
 
   const tableRows = table.getRowModel().rows;
   const shouldShowSearch = !hideSearch && rows.length >= 20;
-  const exportColumns = columns.map((column) => {
+  const exportColumns = allColumns.map((column) => {
+    const key = String(column.id);
+    return { key, header: columnLabels[key] ?? key };
+  });
+  const pngColumns = visibleColumns.map((column) => {
     const key = String(column.id);
     return { key, header: columnLabels[key] ?? key };
   });
   const exportRows = tableRows.map((row) =>
-    Object.fromEntries(exportColumns.map((column) => [column.key, row.getValue(column.key)])),
+    Object.fromEntries(exportColumns.map((column) => [column.key, row.original[column.key]])),
+  );
+  const pngRows = tableRows.map((row) =>
+    Object.fromEntries(pngColumns.map((column) => [column.key, row.getValue(column.key)])),
   );
   const defaultColumnWidth = 150;
-  const visibleColumnWidths = columns.map((column) => columnWidths[String(column.id)] ?? defaultColumnWidth);
+  const visibleColumnWidths = visibleColumns.map((column) => columnWidths[String(column.id)] ?? defaultColumnWidth);
   const tableWidth = Math.max(
     visibleColumnWidths.reduce((sum, width) => sum + width, 0),
     900,
@@ -182,6 +198,29 @@ export function DataTable({
     }
   }
 
+  async function handlePngExport() {
+    if (!exportFilename || pngColumns.length === 0) return;
+    await exportTableToPng({
+      rows: pngRows,
+      columns: pngColumns.map((column, index) => ({ ...column, width: visibleColumnWidths[index] })),
+      title: title ?? "Tabell",
+      subtitle: `${tableRows.length.toLocaleString("nb-NO")} av ${rows.length.toLocaleString("nb-NO")} rader`,
+      filename: pngFilenameFromExportFilename(exportFilename),
+      metadata: exportMetadata,
+      rowClassNames: tableRows.map((row) => rowClassName?.(row.original) ?? ""),
+      formatValue: formatCellValue,
+    });
+  }
+
+  function hideColumn(columnId: string) {
+    if (visibleColumns.length <= 1) return;
+    setHiddenColumnIds((current) => (current.includes(columnId) ? current : [...current, columnId]));
+  }
+
+  function showColumn(columnId: string) {
+    setHiddenColumnIds((current) => current.filter((id) => id !== columnId));
+  }
+
   return (
     <section className="table-shell">
       <div className="table-toolbar">
@@ -193,16 +232,39 @@ export function DataTable({
         </div>
         <div className="table-actions">
           {shouldShowSearch ? (
-            <label className="table-search">
+            <label className="table-search" data-png-exclude="true">
               <Search size={16} />
               <input value={globalFilter} onChange={(event) => setGlobalFilter(event.target.value)} placeholder="Søk i tabellen" />
             </label>
           ) : null}
+          <details className="column-menu">
+            <summary aria-label="Vis eller skjul kolonner" title="Vis eller skjul kolonner">
+              <Columns3 size={16} />
+              {validHiddenColumnIds.length > 0 ? <span>{validHiddenColumnIds.length}</span> : null}
+            </summary>
+            <div className="column-menu-panel">
+              <strong>Skjulte kolonner</strong>
+              {hiddenColumnLabels.length === 0 ? <p>Alle kolonner vises</p> : null}
+              {hiddenColumnLabels.map((column) => (
+                <button type="button" onClick={() => showColumn(column.id)} key={column.id}>
+                  <Eye size={15} />
+                  {column.label}
+                </button>
+              ))}
+              {hiddenColumnLabels.length > 0 ? (
+                <button type="button" className="show-all-columns" onClick={() => setHiddenColumnIds([])}>
+                  Vis alle kolonner
+                </button>
+              ) : null}
+            </div>
+          </details>
           {exportFilename ? (
-            <button className="table-export-button" disabled={exporting} onClick={handleExport}>
-              <Download size={16} />
-              {exporting ? "Lager Excel" : "Eksporter Excel"}
-            </button>
+            <>
+              <button className="table-export-button" disabled={exporting} onClick={handleExport} aria-label={exporting ? "Lager Excel" : "Eksporter Excel"} title="Eksporter Excel" data-png-exclude="true">
+                <Download size={16} />
+              </button>
+              <PngExportButton className="table-export-button" filename={pngFilenameFromExportFilename(exportFilename)} onExport={handlePngExport} />
+            </>
           ) : null}
         </div>
       </div>
@@ -217,9 +279,26 @@ export function DataTable({
                     onClick={header.column.getToggleSortingHandler()}
                     style={{ width: visibleColumnWidths[index], minWidth: visibleColumnWidths[index], maxWidth: visibleColumnWidths[index] }}
                   >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                    <span className="sort-mark">
-                      {{ asc: " ↑", desc: " ↓" }[header.column.getIsSorted() as string] ?? ""}
+                    <span className="column-header-label">
+                      <span>
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        <span className="sort-mark">
+                          {{ asc: " ↑", desc: " ↓" }[header.column.getIsSorted() as string] ?? ""}
+                        </span>
+                      </span>
+                      <button
+                        className="column-hide-button"
+                        type="button"
+                        title="Skjul kolonne"
+                        aria-label={`Skjul ${String(header.column.columnDef.header)}`}
+                        disabled={visibleColumns.length <= 1}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          hideColumn(String(header.column.id));
+                        }}
+                      >
+                        <EyeOff size={14} />
+                      </button>
                     </span>
                   </th>
                 ))}
