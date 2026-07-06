@@ -80,6 +80,18 @@ function ZoomableChartPanel({
   );
 }
 
+function chartTextSizes(zoomed: boolean) {
+  return {
+    title: zoomed ? 24 : 17,
+    subtitle: zoomed ? 17 : 13,
+    axis: zoomed ? 17 : 12,
+    axisLineHeight: zoomed ? 24 : 16,
+    legend: zoomed ? 16 : 12,
+    label: zoomed ? 17 : 12,
+    strongLabel: zoomed ? 18 : 13,
+  };
+}
+
 function ChartExportActions({
   exportFilename,
   exporting,
@@ -333,21 +345,24 @@ export function BarChart({
 
   return (
     <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"} chartRef={chartRef}>
-      {(zoomed) => (
+      {(zoomed) => {
+        const text = chartTextSizes(zoomed);
+        return (
         <>
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
         ref={chartRef}
         style={{ height: zoomed ? "calc(94vh - 128px)" : Math.max(360, data.length * 28) }}
         option={{
-          title: { text: title, left: 0, top: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
-          grid: { left: categoryLabelWidth + 20, right: showCountInside ? 86 : valueLabelWidth, top: 58, bottom: includeTotal || emphasizeDifferences ? 12 : 28 },
+          title: { text: title, left: 0, top: 0, textStyle: { fontSize: text.title, fontWeight: 650 } },
+          grid: { left: categoryLabelWidth + (zoomed ? 40 : 20), right: showCountInside ? (zoomed ? 112 : 86) : valueLabelWidth, top: zoomed ? 76 : 58, bottom: includeTotal || emphasizeDifferences ? 12 : zoomed ? 40 : 28 },
           tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
           xAxis: {
             type: "value",
             min: xAxisMin,
             axisLabel: {
               show: !hideXAxisValues && !includeTotal && !emphasizeDifferences,
+              fontSize: text.axis,
               formatter: (value: number) => value.toLocaleString("nb-NO"),
             },
           },
@@ -359,7 +374,8 @@ export function BarChart({
               width: categoryLabelWidth,
               overflow: showFullCategoryLabels ? "break" : "truncate",
               ellipsis: "...",
-              lineHeight: 16,
+              fontSize: text.axis,
+              lineHeight: text.axisLineHeight,
             },
           },
           series: [
@@ -382,6 +398,7 @@ export function BarChart({
                       position: "right",
                       distance: 4,
                       color: "#1f2937",
+                      fontSize: text.label,
                       fontWeight: 650,
                       formatter: ({ value }: { value: number }) => value.toLocaleString("nb-NO"),
                     },
@@ -397,6 +414,7 @@ export function BarChart({
                     position: "insideLeft",
                     distance: 12,
                     color: "#ffffff",
+                    fontSize: text.strongLabel,
                     fontWeight: 700,
                     formatter: ({ data }: { data: DataPoint }) => {
                       const label = startLabelFormatter?.(data) ?? `N = ${data.count}`;
@@ -407,6 +425,7 @@ export function BarChart({
                     show: true,
                     position: "right",
                     color: "#1f2937",
+                    fontSize: text.label,
                     fontWeight: 650,
                     formatter: ({ value }: { value: number }) => value.toLocaleString("nb-NO"),
                   },
@@ -415,7 +434,8 @@ export function BarChart({
         }}
       />
         </>
-      )}
+        );
+      }}
     </ZoomableChartPanel>
   );
 }
@@ -476,26 +496,29 @@ export function ColumnChart({
 
   return (
     <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"} chartRef={chartRef}>
-      {(zoomed) => (
+      {(zoomed) => {
+        const text = chartTextSizes(zoomed);
+        return (
         <>
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
         ref={chartRef}
         style={{ height: zoomed ? "calc(94vh - 128px)" : 360 }}
         option={{
-          title: { text: title, left: 0, top: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
-          grid: { left: 72, right: 28, top: 58, bottom: 54 },
+          title: { text: title, left: 0, top: 0, textStyle: { fontSize: text.title, fontWeight: 650 } },
+          grid: { left: zoomed ? 94 : 72, right: zoomed ? 42 : 28, top: zoomed ? 76 : 58, bottom: zoomed ? 72 : 54 },
           tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
           xAxis: {
             type: "category",
             data: data.map((item) => item.name),
-            axisLabel: { interval: 0 },
+            axisLabel: { interval: 0, fontSize: text.axis },
           },
           yAxis: {
             type: "value",
             min: yAxisMin,
             axisLabel: {
               show: false,
+              fontSize: text.axis,
               formatter: (value: number) => value.toLocaleString("nb-NO"),
             },
           },
@@ -512,6 +535,7 @@ export function ColumnChart({
                 position: "insideBottom",
                 distance: 12,
                 color: "#ffffff",
+                fontSize: text.strongLabel,
                 fontWeight: 700,
                 formatter: ({ data }: { data: DataPoint }) => `N = ${data.count}`,
               },
@@ -528,6 +552,7 @@ export function ColumnChart({
                 show: true,
                 position: "top",
                 color: "#1f2937",
+                fontSize: text.label,
                 fontWeight: 650,
                 formatter: ({ value }: { value: number }) => value.toLocaleString("nb-NO"),
               },
@@ -536,7 +561,8 @@ export function ColumnChart({
         }}
       />
         </>
-      )}
+        );
+      }}
     </ZoomableChartPanel>
   );
 }
@@ -594,7 +620,7 @@ export function GroupedBarChart({
       return { value, count: numeric.length };
     }),
   }));
-  const valueLabelSeries =
+  const valueLabelSeries = (text: ReturnType<typeof chartTextSizes>) =>
     orientation === "vertical"
       ? series.map((item) => ({
           ...item,
@@ -609,6 +635,7 @@ export function GroupedBarChart({
               position: "top",
               distance: 4,
               color: "#1f2937",
+              fontSize: text.label,
               fontWeight: 650,
               formatter: ({ value }: { value: number }) => value.toLocaleString("nb-NO"),
             },
@@ -622,7 +649,7 @@ export function GroupedBarChart({
             position: "insideBottom",
             distance: 10,
             color: "#ffffff",
-            fontSize: 13,
+            fontSize: text.strongLabel,
             fontWeight: 800,
             formatter: ({ data }: { data: { count: number } }) => `N=${data.count}`,
           },
@@ -633,6 +660,7 @@ export function GroupedBarChart({
             show: true,
             position: "right",
             color: "#1f2937",
+            fontSize: text.label,
             formatter: ({ value }: { value: number }) => value.toLocaleString("nb-NO"),
           },
         }));
@@ -660,7 +688,9 @@ export function GroupedBarChart({
 
   return (
     <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"} chartRef={chartRef}>
-      {(zoomed) => (
+      {(zoomed) => {
+        const text = chartTextSizes(zoomed);
+        return (
         <>
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
@@ -668,23 +698,24 @@ export function GroupedBarChart({
         notMerge
         style={{ height: zoomed ? "calc(94vh - 128px)" : orientation === "vertical" ? 390 : Math.max(390, groups.length * 34) }}
         option={{
-          title: { text: title, left: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
-          legend: { top: 30 },
+          title: { text: title, left: 0, textStyle: { fontSize: text.title, fontWeight: 650 } },
+          legend: { top: zoomed ? 42 : 30, textStyle: { fontSize: text.legend } },
           tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-          grid: orientation === "vertical" ? { left: 58, right: 28, top: 82, bottom: 52 } : { left: 170, right: 24, top: 82, bottom: 34 },
+          grid: orientation === "vertical" ? { left: zoomed ? 82 : 58, right: zoomed ? 42 : 28, top: zoomed ? 106 : 82, bottom: zoomed ? 72 : 52 } : { left: zoomed ? 220 : 170, right: zoomed ? 42 : 24, top: zoomed ? 106 : 82, bottom: zoomed ? 48 : 34 },
           xAxis:
             orientation === "vertical"
-              ? { type: "category", data: groups, axisLabel: { interval: 0 } }
-              : { type: "value", axisLabel: { formatter: (value: number) => value.toLocaleString("nb-NO") } },
+              ? { type: "category", data: groups, axisLabel: { interval: 0, fontSize: text.axis } }
+              : { type: "value", axisLabel: { fontSize: text.axis, formatter: (value: number) => value.toLocaleString("nb-NO") } },
           yAxis:
             orientation === "vertical"
-              ? { type: "value", axisLabel: { show: false, formatter: (value: number) => value.toLocaleString("nb-NO") } }
-              : { type: "category", inverse: true, data: groups, axisLabel: { width: 150, overflow: "truncate" } },
-          series: valueLabelSeries,
+              ? { type: "value", axisLabel: { show: false, fontSize: text.axis, formatter: (value: number) => value.toLocaleString("nb-NO") } }
+              : { type: "category", inverse: true, data: groups, axisLabel: { width: zoomed ? 200 : 150, overflow: "truncate", fontSize: text.axis } },
+          series: valueLabelSeries(text),
         }}
       />
         </>
-      )}
+        );
+      }}
     </ZoomableChartPanel>
   );
 }
@@ -775,7 +806,9 @@ export function YearGenderTrendChart({
 
   return (
     <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"} chartRef={chartRef}>
-      {(zoomed) => (
+      {(zoomed) => {
+        const text = chartTextSizes(zoomed);
+        return (
         <>
       <div className="chart-sort-toggle" aria-label="Sorter årsgraf">
         <button className={!sortBySalary ? "active" : ""} type="button" aria-pressed={!sortBySalary} onClick={() => setSortBySalary(false)}>
@@ -791,8 +824,8 @@ export function YearGenderTrendChart({
         notMerge
         style={{ height: zoomed ? "calc(94vh - 128px)" : 390 }}
         option={{
-          title: { text: title, left: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
-          legend: { top: 30 },
+          title: { text: title, left: 0, textStyle: { fontSize: text.title, fontWeight: 650 } },
+          legend: { top: zoomed ? 42 : 30, textStyle: { fontSize: text.legend } },
           tooltip: {
             trigger: "axis",
             formatter: (params: Array<{ seriesName: string; data: { value?: number; count?: number } | null }>) =>
@@ -805,12 +838,13 @@ export function YearGenderTrendChart({
                 })
                 .join("<br/>"),
           },
-          grid: { left: 72, right: 28, top: 82, bottom: 48 },
-          xAxis: { type: "category", data: yearLabels, axisLabel: { interval: 0 } },
+          grid: { left: zoomed ? 96 : 72, right: zoomed ? 42 : 28, top: zoomed ? 106 : 82, bottom: zoomed ? 66 : 48 },
+          xAxis: { type: "category", data: yearLabels, axisLabel: { interval: 0, fontSize: text.axis } },
           yAxis: {
             type: "value",
             min: yAxisMin,
             axisLabel: {
+              fontSize: text.axis,
               formatter: (value: number) => value.toLocaleString("nb-NO"),
             },
           },
@@ -845,7 +879,8 @@ export function YearGenderTrendChart({
         }}
       />
         </>
-      )}
+        );
+      }}
     </ZoomableChartPanel>
   );
 }
@@ -904,7 +939,11 @@ export function ExternalSalaryDevelopmentChart({
 
   return (
     <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"} chartRef={chartRef}>
-      {(zoomed) => (
+      {(zoomed) => {
+        const text = chartTextSizes(zoomed);
+        const zoomRowHeight = zoomed ? 66 : rowHeight;
+        const zoomChartTop = zoomed ? 126 : chartTop;
+        return (
         <>
       <div className="chart-sort-toggle" aria-label="Velg avtale">
         <button className={selectedAgreement === "Akademikerne/Unio" ? "active" : ""} type="button" aria-pressed={selectedAgreement === "Akademikerne/Unio"} onClick={() => setSelectedAgreement("Akademikerne/Unio")}>
@@ -924,23 +963,23 @@ export function ExternalSalaryDevelopmentChart({
             text: title,
             subtext: "2021 mot 2025, synkende etter endring",
             left: 0,
-            textStyle: { fontSize: 17, fontWeight: 650 },
-            subtextStyle: { color: "#425463", fontSize: 13 },
+            textStyle: { fontSize: text.title, fontWeight: 650 },
+            subtextStyle: { color: "#425463", fontSize: text.subtitle },
           },
-          legend: { top: 44, data: ["2021", "2025"] },
+          legend: { top: zoomed ? 62 : 44, data: ["2021", "2025"], textStyle: { fontSize: text.legend } },
           tooltip: {
             trigger: "item",
             formatter: ({ seriesName, data: itemData }: { seriesName: string; data: [number, string] }) => `${seriesName}: ${itemData[0].toLocaleString("nb-NO")}`,
           },
-          grid: { left: 360, right: 170, top: chartTop, bottom: 42 },
+          grid: { left: zoomed ? 450 : 360, right: zoomed ? 210 : 170, top: zoomChartTop, bottom: zoomed ? 58 : 42 },
           graphic: [
             ...(nkomIndex >= 0
               ? [
                   {
                     type: "rect",
                     left: 0,
-                    top: chartTop + nkomIndex * rowHeight - 16,
-                    shape: { width: 5000, height: rowHeight },
+                    top: zoomChartTop + nkomIndex * zoomRowHeight - 16,
+                    shape: { width: 5000, height: zoomRowHeight },
                     style: { fill: "rgba(0,0,0,0)", stroke: "#1f6f8b", lineWidth: 2 },
                     silent: true,
                     z: 20,
@@ -950,8 +989,8 @@ export function ExternalSalaryDevelopmentChart({
             {
               type: "text",
               right: 20,
-              top: chartTop - 34,
-              style: { text: "Endring", fill: "#425463", fontSize: 13, fontWeight: 700, textAlign: "right" },
+              top: zoomChartTop - (zoomed ? 46 : 34),
+              style: { text: "Endring", fill: "#425463", fontSize: text.strongLabel, fontWeight: 700, textAlign: "right" },
               silent: true,
             },
             ...data.map((row, index) => {
@@ -959,11 +998,11 @@ export function ExternalSalaryDevelopmentChart({
               return {
                 type: "text",
                 right: 20,
-                top: chartTop + index * rowHeight + 22,
+                top: zoomChartTop + index * zoomRowHeight + (zoomed ? 28 : 22),
                 style: {
                   text: `${change >= 0 ? "+" : ""}${change.toLocaleString("nb-NO")}`,
                   fill: change >= 0 ? "#1f6f2b" : "#a734a7",
-                  fontSize: 13,
+                  fontSize: text.strongLabel,
                   fontWeight: 700,
                   textAlign: "right",
                 },
@@ -981,7 +1020,7 @@ export function ExternalSalaryDevelopmentChart({
             type: "category",
             inverse: true,
             data: businesses,
-            axisLabel: { width: 330, overflow: "truncate" },
+            axisLabel: { width: zoomed ? 420 : 330, overflow: "truncate", fontSize: text.axis },
           },
           series: [
             ...data.map((row) => ({
@@ -1007,6 +1046,7 @@ export function ExternalSalaryDevelopmentChart({
                 show: true,
                 position: "left",
                 color: "#a34818",
+                fontSize: text.label,
                 fontWeight: 650,
                 formatter: ({ data: itemData }: { data: [number, string] }) => itemData[0].toLocaleString("nb-NO"),
               },
@@ -1022,6 +1062,7 @@ export function ExternalSalaryDevelopmentChart({
                 show: true,
                 position: "right",
                 color: "#164f68",
+                fontSize: text.label,
                 fontWeight: 650,
                 formatter: ({ data: itemData }: { data: [number, string] }) => itemData[0].toLocaleString("nb-NO"),
               },
@@ -1030,7 +1071,8 @@ export function ExternalSalaryDevelopmentChart({
         }}
       />
         </>
-      )}
+        );
+      }}
     </ZoomableChartPanel>
   );
 }
@@ -1083,7 +1125,9 @@ export function ExternalComparisonToggleChart({
 
   return (
     <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"} chartRef={chartRef}>
-      {(zoomed) => (
+      {(zoomed) => {
+        const text = chartTextSizes(zoomed);
+        return (
         <>
       <div className="chart-sort-toggle" aria-label="Velg avtale">
         <button className={selectedAgreement === "Akademikerne/Unio" ? "active" : ""} type="button" aria-pressed={selectedAgreement === "Akademikerne/Unio"} onClick={() => setSelectedAgreement("Akademikerne/Unio")}>
@@ -1099,18 +1143,18 @@ export function ExternalComparisonToggleChart({
         notMerge
         style={{ height: zoomed ? "calc(94vh - 128px)" : Math.max(500, data.length * 30 + 96) }}
         option={{
-          title: { text: `${title} - ${selectedAgreement}`, left: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
+          title: { text: `${title} - ${selectedAgreement}`, left: 0, textStyle: { fontSize: text.title, fontWeight: 650 } },
           tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-          grid: { left: 380, right: 34, top: 66, bottom: 30 },
+          grid: { left: zoomed ? 470 : 380, right: zoomed ? 60 : 34, top: zoomed ? 86 : 66, bottom: zoomed ? 44 : 30 },
           xAxis: {
             type: "value",
-            axisLabel: { show: false },
+            axisLabel: { show: false, fontSize: text.axis },
           },
           yAxis: {
             type: "category",
             inverse: true,
             data: data.map((item) => item.name),
-            axisLabel: { width: 350, overflow: "truncate" },
+            axisLabel: { width: zoomed ? 440 : 350, overflow: "truncate", fontSize: text.axis },
           },
           series: [
             {
@@ -1123,6 +1167,7 @@ export function ExternalComparisonToggleChart({
                 show: true,
                 position: "right",
                 color: "#1f2937",
+                fontSize: text.label,
                 fontWeight: 650,
                 formatter: ({ value }: { value: number }) => value.toLocaleString("nb-NO"),
               },
@@ -1131,7 +1176,8 @@ export function ExternalComparisonToggleChart({
         }}
       />
         </>
-      )}
+        );
+      }}
     </ZoomableChartPanel>
   );
 }
@@ -1359,21 +1405,24 @@ export function DistributionChart({ rows, exportFilename, exportMetadata = [] }:
 
   return (
     <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"} chartRef={chartRef}>
-      {(zoomed) => (
+      {(zoomed) => {
+        const text = chartTextSizes(zoomed);
+        return (
         <>
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
         ref={chartRef}
         style={{ height: zoomed ? "calc(94vh - 128px)" : 360 }}
         option={{
-          title: { text: "Lønnsnivå etter alder", left: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
+          title: { text: "Lønnsnivå etter alder", left: 0, textStyle: { fontSize: text.title, fontWeight: 650 } },
           tooltip: { trigger: "axis" },
-          grid: { left: 72, right: 24, top: 58, bottom: 58 },
+          grid: { left: zoomed ? 96 : 72, right: zoomed ? 42 : 24, top: zoomed ? 76 : 58, bottom: zoomed ? 78 : 58 },
           xAxis: {
             type: "category",
             data: groups.map((item) => item.name),
             axisLabel: {
-              lineHeight: 18,
+              fontSize: text.axis,
+              lineHeight: zoomed ? 28 : 18,
               formatter: (value: string) => `${value}\nN = ${countsByGroup.get(value) ?? 0}`,
             },
           },
@@ -1381,6 +1430,7 @@ export function DistributionChart({ rows, exportFilename, exportMetadata = [] }:
             type: "value",
             min: 600000,
             axisLabel: {
+              fontSize: text.axis,
               formatter: (value: number) => Math.round(value).toLocaleString("nb-NO"),
             },
           },
@@ -1396,6 +1446,7 @@ export function DistributionChart({ rows, exportFilename, exportMetadata = [] }:
                 show: true,
                 position: "top",
                 color: "#1f2937",
+                fontSize: text.label,
                 fontWeight: 650,
                 formatter: ({ value }: { value: number }) => Math.round(value).toLocaleString("nb-NO"),
               },
@@ -1404,7 +1455,8 @@ export function DistributionChart({ rows, exportFilename, exportMetadata = [] }:
         }}
       />
         </>
-      )}
+        );
+      }}
     </ZoomableChartPanel>
   );
 }
