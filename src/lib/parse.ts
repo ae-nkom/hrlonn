@@ -1,9 +1,11 @@
-import * as duckdb from "@duckdb/duckdb-wasm";
 import ExcelJS from "exceljs";
 import { normalizeRows } from "./columns";
 import type { Row, StoredBundle, UploadFilePatch, UploadFiles } from "./types";
 
-let duckDbPromise: Promise<duckdb.AsyncDuckDB> | null = null;
+const REFERENCE_SHEET_NAME = "Referanselønn";
+const REFERENCE_TITLE = "Referanselønn";
+const REFERENCE_HEADER_ROW = 4;
+const REFERENCE_HEADERS = ["navn", "init", "ref_ar", "ref_lonn"];
 
 function cleanCell(value: unknown): unknown {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -25,40 +27,6 @@ function cleanRows(rows: Row[]): Row[] {
   return rows.map((row) =>
     Object.fromEntries(Object.entries(row).map(([key, value]) => [key, cleanCell(value)])),
   );
-}
-
-async function initDuckDb(): Promise<duckdb.AsyncDuckDB> {
-  if (duckDbPromise) return duckDbPromise;
-  duckDbPromise = (async () => {
-    const bundles = duckdb.getJsDelivrBundles();
-    const bundle = await duckdb.selectBundle(bundles);
-    const workerUrl = URL.createObjectURL(
-      new Blob([`importScripts("${bundle.mainWorker!}");`], { type: "text/javascript" }),
-    );
-    const worker = new Worker(workerUrl);
-    const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
-    await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-    URL.revokeObjectURL(workerUrl);
-    return db;
-  })();
-  return duckDbPromise;
-}
-
-async function readParquetRows(file: File): Promise<Row[]> {
-  const db = await initDuckDb();
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  await db.registerFileBuffer("referanselonn.parquet", bytes);
-  const conn = await db.connect();
-  try {
-    const arrowTable = await conn.query(`select * from read_parquet('referanselonn.parquet')`);
-    return arrowTable.toArray().map((row) =>
-      Object.fromEntries(
-        arrowTable.schema.fields.map((field) => [field.name, cleanCell((row as Record<string, unknown>)[field.name])]),
-      ),
-    );
-  } finally {
-    await conn.close();
-  }
 }
 
 async function readWorkbook(file: File) {
@@ -90,6 +58,30 @@ function sheetRows(workbook: ExcelJS.Workbook, sheetName: string): Row[] {
   );
 }
 
+function rowsFromHeaderRow(worksheet: ExcelJS.Worksheet, headerRowNumber: number): Row[] {
+  const rows = Array.from({ length: worksheet.rowCount }, (_, index) => rowValues(worksheet, index + 1));
+  const headerRow = rows[headerRowNumber - 1] ?? [];
+  const headers = REFERENCE_HEADERS.map((_, index) => String(headerRow[index] ?? "").trim());
+  const invalidHeader = REFERENCE_HEADERS.find((header, index) => headers[index] !== header);
+  if (invalidHeader) {
+    throw new Error(`Referanselønn må ha kolonnene ${REFERENCE_HEADERS.join(", ")} på rad ${headerRowNumber}.`);
+  }
+  return cleanRows(
+    rows.slice(headerRowNumber).map((row) =>
+      Object.fromEntries(REFERENCE_HEADERS.map((header, index) => [header, cleanCell(row[index])])),
+    ),
+  );
+}
+
+function referenceSalaryRows(workbook: ExcelJS.Workbook): Row[] {
+  const worksheet = getWorksheet(workbook, REFERENCE_SHEET_NAME);
+  const title = cleanCell(worksheet.getRow(1).getCell(1).value);
+  if (title !== REFERENCE_TITLE) {
+    throw new Error(`Referanselønn må være en Excel-fil eksportert med "${REFERENCE_TITLE}" i celle A1.`);
+  }
+  return rowsFromHeaderRow(worksheet, REFERENCE_HEADER_ROW);
+}
+
 function sheetMatrix(workbook: ExcelJS.Workbook, sheetName: string): Row[] {
   const worksheet = getWorksheet(workbook, sheetName);
   const matrix = Array.from({ length: worksheet.rowCount }, (_, index) => rowValues(worksheet, index + 1));
@@ -100,12 +92,13 @@ function sheetMatrix(workbook: ExcelJS.Workbook, sheetName: string): Row[] {
 }
 
 export async function parseUploadFiles(files: UploadFiles): Promise<StoredBundle> {
-  const [sapWorkbook, manualWorkbook, referanselonn] = await Promise.all([
+  const [sapWorkbook, manualWorkbook, referenceWorkbook] = await Promise.all([
     readWorkbook(files.sap),
     readWorkbook(files.manuell),
-    readParquetRows(files.referanselonn),
+    readWorkbook(files.referanselonn),
   ]);
   const sapRaw = normalizeRows(sheetRows(sapWorkbook, "Ark1"));
+  const referanselonn = referenceSalaryRows(referenceWorkbook);
   const orgTilordning = normalizeRows(sheetRows(manualWorkbook, "Org-tilordning"));
   const medarbeiderdata = normalizeRows(sheetRows(manualWorkbook, "Medarbeiderdata"));
   const avdelingsdataRaw = sheetMatrix(manualWorkbook, "Avdelingsdata");
@@ -155,13 +148,13 @@ export async function updateStoredBundleFromUploads(existing: StoredBundle | nul
   }
 
   if (files.referanselonn) {
-    const referanselonn = await readParquetRows(files.referanselonn);
+    const referenceWorkbook = await readWorkbook(files.referanselonn);
     next.sources.referanselonn = {
       name: files.referanselonn.name,
       role: "Referanselønn",
       size: files.referanselonn.size,
     };
-    next.tables.referanselonn = normalizeRows(cleanRows(referanselonn));
+    next.tables.referanselonn = normalizeRows(cleanRows(referenceSalaryRows(referenceWorkbook)));
     next.tables.kpi = [];
     delete next.sources.kpi;
   }

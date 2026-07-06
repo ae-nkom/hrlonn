@@ -52,7 +52,7 @@ export function UploadPanel({
       </div>
       <div className="upload-grid">
         <FileInput title="SAP-rådata" accept=".xlsx,.xls" file={sap} source={sources?.sap_raw} setFile={(file) => handleFile("sap", file)} />
-        <FileInput title="Referanselønn" accept=".parquet" file={referanselonn} source={sources?.referanselonn} setFile={(file) => handleFile("referanselonn", file)} />
+        <FileInput title="Referanselønn" accept=".xlsx,.xls" file={referanselonn} source={sources?.referanselonn} setFile={(file) => handleFile("referanselonn", file)} />
         <FileInput title="Manuell input" accept=".xlsx,.xls" file={manuell} source={sources?.manuell_input} setFile={(file) => handleFile("manuell", file)} />
       </div>
       <button className="primary-action" disabled={!complete || busy} onClick={() => complete && onUpload({ sap, referanselonn, manuell })}>
@@ -106,11 +106,27 @@ function FileInput({
 }) {
   const [dragging, setDragging] = useState(false);
   const displayedName = file?.name ?? source?.name ?? "Velg eller dra inn fil";
+  const acceptLabel = accept
+    .split(",")
+    .map((part) => part.trim().replace(".", "").toUpperCase())
+    .join(" / ");
+
+  function acceptsFile(candidate: File): boolean {
+    return accept
+      .split(",")
+      .map((part) => part.trim().toLowerCase())
+      .some((part) => candidate.name.toLowerCase().endsWith(part));
+  }
 
   function handleDrop(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
     setDragging(false);
-    setFile(event.dataTransfer.files?.[0] ?? null);
+    const droppedFile = event.dataTransfer.files?.[0] ?? null;
+    if (!droppedFile) {
+      setFile(null);
+      return;
+    }
+    if (acceptsFile(droppedFile)) setFile(droppedFile);
   }
 
   return (
@@ -120,12 +136,22 @@ function FileInput({
         event.preventDefault();
         setDragging(true);
       }}
-      onDragOver={(event) => event.preventDefault()}
-      onDragLeave={() => setDragging(false)}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
       onDrop={handleDrop}
     >
-      <span>{title}</span>
+      <span className="file-card-title">{title}</span>
       <strong>{displayedName}</strong>
+      <span className="file-card-drop-hint">
+        <UploadCloud size={18} />
+        {dragging ? "Slipp filen her" : `Klikk eller slipp ${acceptLabel}`}
+      </span>
       <input type="file" accept={accept} onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)} />
     </label>
   );

@@ -365,13 +365,26 @@ main {
 }
 
 .file-card {
+  position: relative;
   display: grid;
-  gap: 8px;
-  min-height: 130px;
-  border: 1px dashed #9fb0bd;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  min-height: 164px;
+  border: 2px dashed #9fb0bd;
   border-radius: 8px;
-  padding: 16px;
+  padding: 18px;
   background: #f9fbfc;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.file-card:hover {
+  border-color: #0f6d88;
+  background: #f4fafc;
 }
 
 .file-card.ready {
@@ -382,21 +395,53 @@ main {
 .file-card.drag-over {
   border-color: #0f6d88;
   background: #e8f2f5;
-  box-shadow: 0 0 0 3px rgba(15, 109, 136, 0.12);
+  box-shadow:
+    0 0 0 4px rgba(15, 109, 136, 0.16),
+    0 12px 28px rgba(20, 39, 52, 0.12);
+  transform: translateY(-1px);
 }
 
-.file-card span {
+.file-card-title {
   color: #52616b;
   font-size: 13px;
+  font-weight: 720;
 }
 
 .file-card strong {
-  align-self: end;
+  align-self: center;
   overflow-wrap: anywhere;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.file-card-drop-hint {
+  min-height: 40px;
+  border-radius: 6px;
+  background: #eaf2f6;
+  color: #0f5368;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 760;
+  text-align: center;
+}
+
+.file-card.drag-over .file-card-drop-hint {
+  background: #0f6d88;
+  color: #fff;
 }
 
 .file-card input {
-  align-self: end;
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .primary-action,

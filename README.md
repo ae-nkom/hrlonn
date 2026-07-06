@@ -43,10 +43,10 @@ Hvis port `5173` er opptatt, velger Vite en annen port og skriver URL-en i termi
 På siden `Datagrunnlag` laster du opp tre filer:
 
 - `SAP-rådata`: Excel-fil (`.xlsx` eller `.xls`)
-- `Referanselønn`: Parquet-fil (`.parquet`)
+- `Referanselønn`: Excel-fil (`.xlsx` eller `.xls`) med arket `Referanselønn`, tittel i A1 og kolonnene `navn`, `init`, `ref_ar`, `ref_lonn` på rad 4
 - `Manuell input`: Excel-fil (`.xlsx` eller `.xls`)
 
-Når filene er lastet inn, lagres datagrunnlaget i nettleserens `localStorage`. Du slipper derfor å laste opp filene på nytt etter refresh, så lenge du bruker samme nettleser/profil og ikke tømmer lagret data.
+Når filene er lastet inn, lagres datagrunnlaget i nettleserens `localStorage`. Appen blir på `Datagrunnlag` slik at du kan hente KPI-data før du går videre til oversikten. Du slipper derfor å laste opp filene på nytt etter refresh, så lenge du bruker samme nettleser/profil og ikke tømmer lagret data.
 
 ## KPI-data
 
@@ -54,7 +54,7 @@ KPI-data hentes ikke automatisk. Etter at lønnsgrunnlaget er lastet inn:
 
 1. Skriv målår i feltet `KPI målår`, for eksempel `2026`.
 2. Trykk `Hent KPI-data`.
-3. Appen henter KPI fra SSB og lagrer dette i samme `localStorage`-pakke som resten av datagrunnlaget.
+3. Appen henter KPI fra SSB, lagrer dette i samme `localStorage`-pakke som resten av datagrunnlaget og går deretter til `Oversikt`.
 
 Når KPI-data finnes i `localStorage`, vises grønn bekreftelse på `Datagrunnlag` også etter refresh.
 

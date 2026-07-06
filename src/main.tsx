@@ -486,7 +486,7 @@ function App() {
       const parsed = await updateStoredBundleFromUploads(bundle, files);
       saveStoredBundle(parsed);
       setBundle(parsed);
-      setPage("oversikt");
+      setUploadMessage("Grunnlagsdata er lagret. Hent KPI-data før du går videre til oversikten.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -509,6 +509,7 @@ function App() {
       saveStoredBundle(next);
       setBundle(next);
       setUploadMessage(`KPI-data for ${targetYear} er hentet fra SSB og lagret i kildedata.`);
+      setPage("oversikt");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
