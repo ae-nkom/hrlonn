@@ -569,6 +569,41 @@ main {
   padding-top: 48px;
 }
 
+.zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgb(15 23 42 / 0.44);
+}
+
+.zoomable-panel {
+  cursor: zoom-in;
+}
+
+.zoomable-panel.is-zoomed {
+  position: fixed;
+  inset: 3vh 3vw;
+  z-index: 1001;
+  margin: 0;
+  overflow: auto;
+  cursor: zoom-out;
+  box-shadow: 0 22px 80px rgb(15 23 42 / 0.34);
+}
+
+.chart-panel.is-zoomed {
+  padding: 22px 24px 16px;
+  border-radius: 10px;
+}
+
+.chart-panel.with-chart-export.is-zoomed {
+  padding-top: 56px;
+}
+
+.chart-panel.is-zoomed .chart-export-actions,
+.chart-panel.is-zoomed .chart-sort-toggle {
+  z-index: 2;
+}
+
 .chart-export-actions {
   position: absolute;
   top: 14px;
@@ -992,6 +1027,16 @@ main {
   padding: 12px 12px 10px;
 }
 
+.mini-chart-card.is-zoomed {
+  width: min(920px, 94vw);
+  max-height: 88vh;
+  inset: 6vh 50% auto auto;
+  transform: translateX(50%);
+  border-radius: 10px;
+  background: #fff;
+  padding: 22px 24px;
+}
+
 .mini-chart-card h3 {
   min-height: 40px;
   margin: 0 0 10px;
@@ -1001,9 +1046,20 @@ main {
   letter-spacing: 0;
 }
 
+.mini-chart-card.is-zoomed h3 {
+  min-height: 0;
+  margin-bottom: 18px;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
 .mini-bars {
   display: grid;
   gap: 7px;
+}
+
+.mini-chart-card.is-zoomed .mini-bars {
+  gap: 13px;
 }
 
 .mini-bar-row {
@@ -1014,10 +1070,21 @@ main {
   min-height: 24px;
 }
 
+.mini-chart-card.is-zoomed .mini-bar-row {
+  grid-template-columns: 140px minmax(320px, 1fr) 112px;
+  gap: 14px;
+  min-height: 34px;
+}
+
 .mini-bar-label,
 .mini-bar-value {
   font-size: 12px;
   line-height: 1.2;
+}
+
+.mini-chart-card.is-zoomed .mini-bar-label,
+.mini-chart-card.is-zoomed .mini-bar-value {
+  font-size: 15px;
 }
 
 .mini-bar-label {
@@ -1033,6 +1100,10 @@ main {
   overflow: hidden;
   border-radius: 999px;
   background: #e7edf1;
+}
+
+.mini-chart-card.is-zoomed .mini-bar-track {
+  height: 18px;
 }
 
 .mini-bar-fill {

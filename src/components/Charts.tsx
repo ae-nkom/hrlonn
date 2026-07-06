@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
 import ReactECharts from "echarts-for-react";
 import { Download } from "lucide-react";
 import { formatInt, mean, toNumber, uniqueSorted } from "../lib/format";
@@ -20,6 +20,64 @@ function chartImageDataUrl(ref: RefObject<ReactECharts>) {
     pixelRatio: 3,
     backgroundColor: "#ffffff",
   });
+}
+
+function shouldIgnoreZoomClick(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest("button, a, input, select, textarea, [data-png-exclude], [data-zoom-ignore]"));
+}
+
+function ZoomBackdrop({ active, onClose }: { active: boolean; onClose: () => void }) {
+  return active ? <div className="zoom-backdrop" onClick={onClose} aria-hidden="true" /> : null;
+}
+
+function useZoomState(chartRef?: RefObject<ReactECharts>) {
+  const [zoomed, setZoomed] = useState(false);
+
+  useEffect(() => {
+    if (!zoomed) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setZoomed(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [zoomed]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => chartRef?.current?.getEchartsInstance().resize(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [chartRef, zoomed]);
+
+  function handleClick(event: MouseEvent<HTMLElement>) {
+    if (shouldIgnoreZoomClick(event.target)) return;
+    setZoomed((value) => !value);
+  }
+
+  return { zoomed, setZoomed, handleClick };
+}
+
+function ZoomableChartPanel({
+  className,
+  chartRef,
+  children,
+}: {
+  className: string;
+  chartRef: RefObject<ReactECharts>;
+  children: (zoomed: boolean) => ReactNode;
+}) {
+  const { zoomed, setZoomed, handleClick } = useZoomState(chartRef);
+  return (
+    <>
+      <ZoomBackdrop active={zoomed} onClose={() => setZoomed(false)} />
+      <section className={`${className} zoomable-panel${zoomed ? " is-zoomed" : ""}`} onClick={handleClick} aria-label={zoomed ? "Klikk for å lukke zoomet figur" : "Klikk for å zoome figur"}>
+        {children(zoomed)}
+      </section>
+    </>
+  );
 }
 
 function ChartExportActions({
@@ -274,11 +332,13 @@ export function BarChart({
   }
 
   return (
-    <section className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"}>
+    <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"} chartRef={chartRef}>
+      {(zoomed) => (
+        <>
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
         ref={chartRef}
-        style={{ height: Math.max(360, data.length * 28) }}
+        style={{ height: zoomed ? "calc(94vh - 128px)" : Math.max(360, data.length * 28) }}
         option={{
           title: { text: title, left: 0, top: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
           grid: { left: categoryLabelWidth + 20, right: showCountInside ? 86 : valueLabelWidth, top: 58, bottom: includeTotal || emphasizeDifferences ? 12 : 28 },
@@ -311,6 +371,26 @@ export function BarChart({
               })),
               barMaxWidth,
               itemStyle: { color, borderRadius: [0, 4, 4, 0] },
+              markPoint: showInlineLabel
+                ? {
+                    symbol: "circle",
+                    symbolSize: 0,
+                    silent: true,
+                    tooltip: { show: false },
+                    label: {
+                      show: true,
+                      position: "right",
+                      distance: 4,
+                      color: "#1f2937",
+                      fontWeight: 650,
+                      formatter: ({ value }: { value: number }) => value.toLocaleString("nb-NO"),
+                    },
+                    data: data.map((item) => ({
+                      coord: [item.value, item.name],
+                      value: item.value,
+                    })),
+                  }
+                : undefined,
               label: showInlineLabel
                 ? {
                     show: true,
@@ -331,29 +411,12 @@ export function BarChart({
                     formatter: ({ value }: { value: number }) => value.toLocaleString("nb-NO"),
                   },
             },
-            ...(showInlineLabel
-              ? [
-                  {
-                    type: "bar",
-                    barGap: "-100%",
-                    data: data.map((item) => item.value),
-                    silent: true,
-                    tooltip: { show: false },
-                    itemStyle: { color: "rgba(0, 0, 0, 0)" },
-                    emphasis: { disabled: true },
-                    label: {
-                      show: true,
-                      position: "right",
-                      color: "#1f2937",
-                      formatter: ({ value }: { value: number }) => value.toLocaleString("nb-NO"),
-                    },
-                  },
-                ]
-              : []),
           ],
         }}
       />
-    </section>
+        </>
+      )}
+    </ZoomableChartPanel>
   );
 }
 
@@ -412,11 +475,13 @@ export function ColumnChart({
   }
 
   return (
-    <section className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"}>
+    <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"} chartRef={chartRef}>
+      {(zoomed) => (
+        <>
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
         ref={chartRef}
-        style={{ height: 360 }}
+        style={{ height: zoomed ? "calc(94vh - 128px)" : 360 }}
         option={{
           title: { text: title, left: 0, top: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
           grid: { left: 72, right: 28, top: 58, bottom: 54 },
@@ -470,7 +535,9 @@ export function ColumnChart({
           ],
         }}
       />
-    </section>
+        </>
+      )}
+    </ZoomableChartPanel>
   );
 }
 
@@ -592,12 +659,14 @@ export function GroupedBarChart({
   }
 
   return (
-    <section className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"}>
+    <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"} chartRef={chartRef}>
+      {(zoomed) => (
+        <>
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
         ref={chartRef}
         notMerge
-        style={{ height: orientation === "vertical" ? 390 : Math.max(390, groups.length * 34) }}
+        style={{ height: zoomed ? "calc(94vh - 128px)" : orientation === "vertical" ? 390 : Math.max(390, groups.length * 34) }}
         option={{
           title: { text: title, left: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
           legend: { top: 30 },
@@ -614,7 +683,9 @@ export function GroupedBarChart({
           series: valueLabelSeries,
         }}
       />
-    </section>
+        </>
+      )}
+    </ZoomableChartPanel>
   );
 }
 
@@ -703,7 +774,9 @@ export function YearGenderTrendChart({
   }
 
   return (
-    <section className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"}>
+    <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"} chartRef={chartRef}>
+      {(zoomed) => (
+        <>
       <div className="chart-sort-toggle" aria-label="Sorter årsgraf">
         <button className={!sortBySalary ? "active" : ""} type="button" aria-pressed={!sortBySalary} onClick={() => setSortBySalary(false)}>
           Stigende årstall
@@ -716,7 +789,7 @@ export function YearGenderTrendChart({
       <ReactECharts
         ref={chartRef}
         notMerge
-        style={{ height: 390 }}
+        style={{ height: zoomed ? "calc(94vh - 128px)" : 390 }}
         option={{
           title: { text: title, left: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
           legend: { top: 30 },
@@ -771,7 +844,9 @@ export function YearGenderTrendChart({
           ],
         }}
       />
-    </section>
+        </>
+      )}
+    </ZoomableChartPanel>
   );
 }
 
@@ -828,7 +903,9 @@ export function ExternalSalaryDevelopmentChart({
   }
 
   return (
-    <section className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"}>
+    <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"} chartRef={chartRef}>
+      {(zoomed) => (
+        <>
       <div className="chart-sort-toggle" aria-label="Velg avtale">
         <button className={selectedAgreement === "Akademikerne/Unio" ? "active" : ""} type="button" aria-pressed={selectedAgreement === "Akademikerne/Unio"} onClick={() => setSelectedAgreement("Akademikerne/Unio")}>
           Akademikerne/Unio
@@ -841,7 +918,7 @@ export function ExternalSalaryDevelopmentChart({
       <ReactECharts
         ref={chartRef}
         notMerge
-        style={{ height: Math.max(420, data.length * 54 + 120) }}
+        style={{ height: zoomed ? "calc(94vh - 128px)" : Math.max(420, data.length * 54 + 120) }}
         option={{
           title: {
             text: title,
@@ -952,7 +1029,9 @@ export function ExternalSalaryDevelopmentChart({
           ],
         }}
       />
-    </section>
+        </>
+      )}
+    </ZoomableChartPanel>
   );
 }
 
@@ -1003,7 +1082,9 @@ export function ExternalComparisonToggleChart({
   }
 
   return (
-    <section className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"}>
+    <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"} chartRef={chartRef}>
+      {(zoomed) => (
+        <>
       <div className="chart-sort-toggle" aria-label="Velg avtale">
         <button className={selectedAgreement === "Akademikerne/Unio" ? "active" : ""} type="button" aria-pressed={selectedAgreement === "Akademikerne/Unio"} onClick={() => setSelectedAgreement("Akademikerne/Unio")}>
           Akademikerne/Unio
@@ -1016,7 +1097,7 @@ export function ExternalComparisonToggleChart({
       <ReactECharts
         ref={chartRef}
         notMerge
-        style={{ height: Math.max(500, data.length * 30 + 96) }}
+        style={{ height: zoomed ? "calc(94vh - 128px)" : Math.max(500, data.length * 30 + 96) }}
         option={{
           title: { text: `${title} - ${selectedAgreement}`, left: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
           tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
@@ -1049,7 +1130,9 @@ export function ExternalComparisonToggleChart({
           ],
         }}
       />
-    </section>
+        </>
+      )}
+    </ZoomableChartPanel>
   );
 }
 
@@ -1073,6 +1156,7 @@ export function MatrixTable({
   exportMetadata?: ExportMetadata[];
 }) {
   const [exporting, setExporting] = useState(false);
+  const [zoomedCard, setZoomedCard] = useState<string | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const rowNames = uniqueSorted(rows.map((row) => matrixGroupValue(row[rowColumn]))).slice(0, limitRows);
   const columnNames = uniqueSorted(rows.map((row) => row[columnColumn]));
@@ -1162,7 +1246,28 @@ export function MatrixTable({
     }
   }
 
+  useEffect(() => {
+    if (!zoomedCard) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setZoomedCard(null);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [zoomedCard]);
+
+  function handleMiniCardClick(rowName: string, event: MouseEvent<HTMLElement>) {
+    if (shouldIgnoreZoomClick(event.target)) return;
+    setZoomedCard((current) => (current === rowName ? null : rowName));
+  }
+
   return (
+    <>
+    <ZoomBackdrop active={zoomedCard !== null} onClose={() => setZoomedCard(null)} />
     <section className="matrix-panel" ref={sectionRef}>
       <div className="table-toolbar">
         <div>
@@ -1190,7 +1295,7 @@ export function MatrixTable({
       ) : null}
       <div className="mini-chart-grid" aria-label={`${title}. ${rowColumn} fordelt på ${columnColumn}`}>
         {matrixRows.map(({ rowName, entries }) => (
-          <article className="mini-chart-card" key={rowName}>
+          <article className={`mini-chart-card zoomable-panel${zoomedCard === rowName ? " is-zoomed" : ""}`} key={rowName} onClick={(event) => handleMiniCardClick(rowName, event)} aria-label={zoomedCard === rowName ? "Klikk for å lukke zoomet minifigur" : "Klikk for å zoome minifigur"}>
             <h3>{rowName}</h3>
             <div className="mini-bars">
               {entries.map(({ columnName, label, count, value }) => {
@@ -1217,6 +1322,7 @@ export function MatrixTable({
         ))}
       </div>
     </section>
+    </>
   );
 }
 
@@ -1252,11 +1358,13 @@ export function DistributionChart({ rows, exportFilename, exportMetadata = [] }:
   }
 
   return (
-    <section className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"}>
+    <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-export" : "chart-panel"} chartRef={chartRef}>
+      {(zoomed) => (
+        <>
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
         ref={chartRef}
-        style={{ height: 360 }}
+        style={{ height: zoomed ? "calc(94vh - 128px)" : 360 }}
         option={{
           title: { text: "Lønnsnivå etter alder", left: 0, textStyle: { fontSize: 17, fontWeight: 650 } },
           tooltip: { trigger: "axis" },
@@ -1295,6 +1403,8 @@ export function DistributionChart({ rows, exportFilename, exportMetadata = [] }:
           ],
         }}
       />
-    </section>
+        </>
+      )}
+    </ZoomableChartPanel>
   );
 }
