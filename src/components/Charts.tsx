@@ -103,6 +103,46 @@ function departmentCode(name: string, rows: Row[]) {
   return explicitCode || fallbackDepartmentCode(name) || name;
 }
 
+const departmentPalette = [
+  "#2563eb",
+  "#f97316",
+  "#16a34a",
+  "#7c3aed",
+  "#0891b2",
+  "#db2777",
+  "#a16207",
+  "#475569",
+  "#ca8a04",
+  "#dc2626",
+  "#4f46e5",
+  "#0f766e",
+];
+
+const securityAndPreparednessColor = "#a16207";
+const genderPalette = {
+  total: "#1f6f8b",
+  male: "#14532d",
+  female: "#dc2626",
+};
+
+function createDepartmentColorMap(values: unknown[]) {
+  return new Map(uniqueSorted(values).map((name, index) => [name, departmentPalette[index % departmentPalette.length]]));
+}
+
+function departmentColor(name: unknown, colorMap: Map<string, string> | null) {
+  const departmentName = String(name ?? "");
+  const normalizedName = departmentName.toLocaleLowerCase("nb-NO");
+  if (normalizedName.includes("sikkerhet") && normalizedName.includes("totalforsvar")) {
+    return securityAndPreparednessColor;
+  }
+  return colorMap?.get(departmentName) ?? departmentPalette[0];
+}
+
+function groupedItemColor(groupColumn: string, name: unknown, fallbackColor: string, colorMap: Map<string, string> | null) {
+  if (groupColumn === "kjonn") return genderColor(name, fallbackColor);
+  return groupColumn === "Avdeling" ? departmentColor(name, colorMap) : fallbackColor;
+}
+
 function matrixGroupValue(value: unknown) {
   const text = String(value ?? "");
   return text === "1538 Fagdirektør" || text === "1539 Fagdirektør" ? "1538/1539 Fagdirektør" : text;
@@ -120,6 +160,14 @@ function genderName(value: unknown) {
   if (normalized.includes("kvinne")) return "Kvinne";
   if (normalized.includes("mann")) return "Mann";
   return "";
+}
+
+function genderColor(value: unknown, fallbackColor = genderPalette.total) {
+  const normalized = String(value ?? "").toLocaleLowerCase("nb-NO");
+  if (normalized.includes("kvinne")) return genderPalette.female;
+  if (normalized.includes("mann")) return genderPalette.male;
+  if (normalized.includes("total")) return genderPalette.total;
+  return fallbackColor;
 }
 
 function meanPoint(rows: Row[], valueColumn: string) {
@@ -195,6 +243,7 @@ export function BarChart({
   const groupedData: DataPoint[] = aggregate ? groupedMean(rows, groupColumn, valueColumn, maxRows).map((item) => ({ ...item, row: undefined })) : rowValues(rows, groupColumn, valueColumn);
   const total = includeTotal ? totalMean(rows, valueColumn) : null;
   const data = total ? [total, ...groupedData] : groupedData;
+  const departmentColors = groupColumn === "Avdeling" ? createDepartmentColorMap(rows.map((row) => row[groupColumn])) : null;
   const values = data.map((item) => item.value);
   const xAxisMin = (includeTotal || emphasizeDifferences) && values.length > 0 ? Math.max(0, Math.floor((Math.min(...values) - 35_000) / 10_000) * 10_000) : undefined;
   const showInlineLabel = showCountInside || Boolean(startLabelFormatter);
@@ -258,7 +307,7 @@ export function BarChart({
               type: "bar",
               data: data.map((item) => ({
                 ...item,
-                itemStyle: { color: item.name === highlightName ? highlightColor : color, borderRadius: [0, 4, 4, 0] },
+                itemStyle: { color: item.name === highlightName ? highlightColor : groupedItemColor(groupColumn, item.name, color, departmentColors), borderRadius: [0, 4, 4, 0] },
               })),
               barMaxWidth,
               itemStyle: { color, borderRadius: [0, 4, 4, 0] },
@@ -388,7 +437,10 @@ export function ColumnChart({
           series: [
             {
               type: "bar",
-              data: data.map((item) => ({ ...item })),
+              data: data.map((item) => ({
+                ...item,
+                itemStyle: { color: groupedItemColor(groupColumn, item.name, color, null), borderRadius: [4, 4, 0, 0] },
+              })),
               itemStyle: { color, borderRadius: [4, 4, 0, 0] },
               label: {
                 show: true,
@@ -464,6 +516,7 @@ export function GroupedBarChart({
     id: seriesName,
     name: seriesName,
     type: "bar",
+    itemStyle: { color: seriesColumn === "kjonn" ? genderColor(seriesName) : undefined },
     data: groups.map((group) => {
       const values = rows
         .filter((row) => String(row[groupColumn] ?? "") === group && String(row[seriesColumn] ?? "") === seriesName)
@@ -696,8 +749,8 @@ export function YearGenderTrendChart({
               data: totalData,
               symbol: "circle",
               symbolSize: 7,
-              lineStyle: { width: 3, color: "#1f2937" },
-              itemStyle: { color: "#1f2937" },
+              lineStyle: { width: 3, color: genderPalette.total },
+              itemStyle: { color: genderPalette.total },
             },
             {
               id: "mann",
@@ -705,7 +758,7 @@ export function YearGenderTrendChart({
               type: "scatter",
               data: maleData,
               symbolSize: 9,
-              itemStyle: { color: "#008a3d" },
+              itemStyle: { color: genderPalette.male },
             },
             {
               id: "kvinne",
@@ -713,7 +766,7 @@ export function YearGenderTrendChart({
               type: "scatter",
               data: femaleData,
               symbolSize: 9,
-              itemStyle: { color: "#005bd3" },
+              itemStyle: { color: genderPalette.female },
             },
           ],
         }}
@@ -1023,6 +1076,18 @@ export function MatrixTable({
   const sectionRef = useRef<HTMLElement>(null);
   const rowNames = uniqueSorted(rows.map((row) => matrixGroupValue(row[rowColumn]))).slice(0, limitRows);
   const columnNames = uniqueSorted(rows.map((row) => row[columnColumn]));
+  const departmentColors = columnColumn === "Avdeling" ? createDepartmentColorMap(rows.map((row) => row[columnColumn])) : null;
+  const departmentLegendEntries =
+    columnColumn === "Avdeling"
+      ? columnNames.map((columnName) => {
+          const matchingRows = rows.filter((row) => String(row[columnColumn] ?? "") === columnName);
+          return {
+            name: columnName,
+            label: matrixEntryLabel(columnColumn, columnName, matchingRows),
+            color: departmentColor(columnName, departmentColors),
+          };
+        })
+      : [];
   const matrixRows = rowNames
     .map((rowName) => {
       const rowRows = rows.filter((row) => matrixGroupValue(row[rowColumn]) === rowName);
@@ -1113,6 +1178,16 @@ export function MatrixTable({
           </div>
         ) : null}
       </div>
+      {departmentLegendEntries.length > 0 ? (
+        <div className="department-color-legend" aria-label="Farger for avdelinger">
+          {departmentLegendEntries.map((entry) => (
+            <span key={entry.name} title={entry.name}>
+              <i className="department-color-swatch" style={{ backgroundColor: entry.color }} aria-hidden="true" />
+              {entry.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className="mini-chart-grid" aria-label={`${title}. ${rowColumn} fordelt på ${columnColumn}`}>
         {matrixRows.map(({ rowName, entries }) => (
           <article className="mini-chart-card" key={rowName}>
@@ -1124,13 +1199,14 @@ export function MatrixTable({
                 const maxValue = Math.max(...cardValues);
                 const range = Math.max(1, maxValue - minValue);
                 const width = maxValue === minValue ? 100 : 45 + (((value ?? 0) - minValue) / range) * 55;
+                const fillColor = columnColumn === "Avdeling" ? departmentColor(columnName, departmentColors) : columnColumn === "kjonn" ? genderColor(columnName) : undefined;
                 return (
                   <div className="mini-bar-row" key={columnName}>
                     <span className="mini-bar-label" title={columnName}>
                       {label} ({count})
                     </span>
                     <div className="mini-bar-track" aria-hidden="true">
-                      <div className="mini-bar-fill" style={{ width: `${width}%` }} />
+                      <div className="mini-bar-fill" style={{ width: `${width}%`, backgroundColor: fillColor }} />
                     </div>
                     <span className="mini-bar-value">{formatInt(value)}</span>
                   </div>

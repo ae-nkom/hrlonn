@@ -958,6 +958,32 @@ main {
   padding-bottom: 10px;
 }
 
+.department-color-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: -2px 0 12px;
+  color: #425463;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.department-color-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.department-color-swatch {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  border: 1px solid rgb(255 255 255 / 0.7);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgb(24 35 43 / 0.12);
+}
+
 .mini-chart-card {
   min-width: 0;
   border: 1px solid #dce4ea;
