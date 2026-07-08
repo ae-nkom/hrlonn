@@ -5,6 +5,7 @@ import { formatInt, mean, toNumber, uniqueSorted } from "../lib/format";
 import { pngFilenameFromExportFilename } from "../lib/pngExport";
 import type { Row } from "../lib/types";
 import { exportRowsToXlsx, type ExportMetadata } from "../lib/xlsxExport";
+import { HelpPopover } from "./HelpPopover";
 import { PngExportButton } from "./PngExportButton";
 
 type DataPoint = {
@@ -189,8 +190,9 @@ const departmentPalette = [
 ];
 
 const securityAndPreparednessColor = "#a16207";
+const totalColor = "#111827";
 const genderPalette = {
-  total: "#1f6f8b",
+  total: totalColor,
   male: "#14532d",
   female: "#dc2626",
 };
@@ -209,6 +211,7 @@ function departmentColor(name: unknown, colorMap: Map<string, string> | null) {
 }
 
 function groupedItemColor(groupColumn: string, name: unknown, fallbackColor: string, colorMap: Map<string, string> | null) {
+  if (String(name ?? "").toLocaleLowerCase("nb-NO") === "total") return totalColor;
   if (groupColumn === "kjonn") return genderColor(name, fallbackColor);
   return groupColumn === "Avdeling" ? departmentColor(name, colorMap) : fallbackColor;
 }
@@ -253,6 +256,7 @@ const fixedMatrixColumnOrders: Record<string, string[]> = {
 };
 
 function matrixEntryOrder(columnColumn: string, columnName: unknown) {
+  if (String(columnName) === "Total") return 999;
   const order = fixedMatrixColumnOrders[columnColumn];
   if (!order) return null;
   const index = order.indexOf(String(columnName));
@@ -312,10 +316,11 @@ export function BarChart({
   const chartRef = useRef<ReactECharts>(null);
   const groupedData: DataPoint[] = aggregate ? groupedMean(rows, groupColumn, valueColumn, maxRows).map((item) => ({ ...item, row: undefined })) : rowValues(rows, groupColumn, valueColumn);
   const total = includeTotal ? totalMean(rows, valueColumn) : null;
-  const data = total ? [total, ...groupedData] : groupedData;
+  const data = total ? [...groupedData, total] : groupedData;
   const departmentColors = groupColumn === "Avdeling" ? createDepartmentColorMap(rows.map((row) => row[groupColumn])) : null;
   const values = data.map((item) => item.value);
-  const xAxisMin = (includeTotal || emphasizeDifferences) && values.length > 0 ? Math.max(0, Math.floor((Math.min(...values) - 35_000) / 10_000) * 10_000) : undefined;
+  const xAxisMin = emphasizeDifferences && values.length > 0 ? Math.max(0, Math.floor((Math.min(...values) - 35_000) / 10_000) * 10_000) : undefined;
+  const xAxisMax = values.length > 0 ? Math.ceil((Math.max(...values) * 1.04) / 10_000) * 10_000 : undefined;
   const showInlineLabel = showCountInside || Boolean(startLabelFormatter);
 
   async function handleExport() {
@@ -360,6 +365,7 @@ export function BarChart({
           xAxis: {
             type: "value",
             min: xAxisMin,
+            max: xAxisMax,
             axisLabel: {
               show: !hideXAxisValues && !includeTotal && !emphasizeDifferences,
               fontSize: text.axis,
@@ -383,7 +389,12 @@ export function BarChart({
               type: "bar",
               data: data.map((item) => ({
                 ...item,
-                itemStyle: { color: item.name === highlightName ? highlightColor : groupedItemColor(groupColumn, item.name, color, departmentColors), borderRadius: [0, 4, 4, 0] },
+                itemStyle: {
+                  color: item.name === highlightName ? highlightColor : groupedItemColor(groupColumn, item.name, color, departmentColors),
+                  borderRadius: [0, 4, 4, 0],
+                  borderColor: item.name === "Total" ? "#ffffff" : undefined,
+                  borderWidth: item.name === "Total" ? 1 : 0,
+                },
               })),
               barMaxWidth,
               itemStyle: { color, borderRadius: [0, 4, 4, 0] },
@@ -464,7 +475,7 @@ export function ColumnChart({
   const [exporting, setExporting] = useState(false);
   const chartRef = useRef<ReactECharts>(null);
   const total = includeTotal ? totalMean(rows, valueColumn) : null;
-  const data = total ? [total, ...groupedMeanInOrder(rows, groupColumn, valueColumn, order)] : groupedMeanInOrder(rows, groupColumn, valueColumn, order);
+  const data = total ? [...groupedMeanInOrder(rows, groupColumn, valueColumn, order), total] : groupedMeanInOrder(rows, groupColumn, valueColumn, order);
   const values = data.map((item) => item.value);
   const minValue = values.length > 0 ? Math.min(...values) : 0;
   const yAxisMin = Math.max(0, Math.floor((minValue - 25_000) / 50_000) * 50_000);
@@ -527,7 +538,12 @@ export function ColumnChart({
               type: "bar",
               data: data.map((item) => ({
                 ...item,
-                itemStyle: { color: groupedItemColor(groupColumn, item.name, color, null), borderRadius: [4, 4, 0, 0] },
+                itemStyle: {
+                  color: groupedItemColor(groupColumn, item.name, color, null),
+                  borderRadius: [4, 4, 0, 0],
+                  borderColor: item.name === "Total" ? "#ffffff" : undefined,
+                  borderWidth: item.name === "Total" ? 1 : 0,
+                },
               })),
               itemStyle: { color, borderRadius: [4, 4, 0, 0] },
               label: {
@@ -896,7 +912,9 @@ export function ExternalSalaryDevelopmentChart({
   exportFilename?: string;
   exportMetadata?: ExportMetadata[];
 }) {
-  const [selectedAgreement, setSelectedAgreement] = useState("Akademikerne/Unio");
+  const agreements = uniqueSorted(rows.map((row) => row["Avtale"]));
+  const [selectedAgreementState, setSelectedAgreement] = useState("Alle");
+  const selectedAgreement = agreements.includes(selectedAgreementState) ? selectedAgreementState : agreements[0] ?? "";
   const [exporting, setExporting] = useState(false);
   const chartRef = useRef<ReactECharts>(null);
   const data = rows
@@ -918,19 +936,19 @@ export function ExternalSalaryDevelopmentChart({
         rows: data.map((row) => ({
           Virksomhet: row["Virksomhet"],
           "Lønn 2021": row["Lønn 2021"],
-          "Lønn 2025": row["Lønn 2026"],
+          "Lønn 2026": row["Lønn 2026"],
           Endring: Number(row["Lønn 2026"] ?? 0) - Number(row["Lønn 2021"] ?? 0),
         })),
         columns: [
           { key: "Virksomhet", header: "Virksomhet" },
           { key: "Lønn 2021", header: "Lønn 2021" },
-          { key: "Lønn 2025", header: "Lønn 2025" },
+          { key: "Lønn 2026", header: "Lønn 2026" },
           { key: "Endring", header: "Endring" },
         ],
         title,
         filename: exportFilename,
         sheetName: title,
-        metadata: [...exportMetadata, { label: "Avtale", value: selectedAgreement }],
+        metadata: agreements.length > 1 ? [...exportMetadata, { label: "Avtale", value: selectedAgreement }] : exportMetadata,
       });
     } finally {
       setExporting(false);
@@ -941,18 +959,21 @@ export function ExternalSalaryDevelopmentChart({
     <ZoomableChartPanel className={exportFilename ? "chart-panel with-chart-toggle with-chart-export" : "chart-panel with-chart-toggle"} chartRef={chartRef}>
       {(zoomed) => {
         const text = chartTextSizes(zoomed);
-        const zoomRowHeight = zoomed ? 66 : rowHeight;
         const zoomChartTop = zoomed ? 126 : chartTop;
+        const chartHeight = zoomed ? window.innerHeight * 0.94 - 128 : Math.max(420, data.length * 54 + 120);
+        const gridBottom = zoomed ? 58 : 42;
+        const rowBandHeight = data.length > 0 ? (chartHeight - zoomChartTop - gridBottom) / data.length : rowHeight;
         return (
         <>
-      <div className="chart-sort-toggle" aria-label="Velg avtale">
-        <button className={selectedAgreement === "Akademikerne/Unio" ? "active" : ""} type="button" aria-pressed={selectedAgreement === "Akademikerne/Unio"} onClick={() => setSelectedAgreement("Akademikerne/Unio")}>
-          Akademikerne/Unio
-        </button>
-        <button className={selectedAgreement === "LO Stat" ? "active" : ""} type="button" aria-pressed={selectedAgreement === "LO Stat"} onClick={() => setSelectedAgreement("LO Stat")}>
-          LO Stat
-        </button>
-      </div>
+      {agreements.length > 1 ? (
+        <div className="chart-sort-toggle" aria-label="Velg avtale">
+          {agreements.map((agreement) => (
+            <button className={selectedAgreement === agreement ? "active" : ""} type="button" aria-pressed={selectedAgreement === agreement} onClick={() => setSelectedAgreement(agreement)} key={agreement}>
+              {agreement}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
         ref={chartRef}
@@ -961,31 +982,18 @@ export function ExternalSalaryDevelopmentChart({
         option={{
           title: {
             text: title,
-            subtext: "2021 mot 2025, synkende etter endring",
+            subtext: "2021 mot 2026, synkende etter endring",
             left: 0,
             textStyle: { fontSize: text.title, fontWeight: 650 },
             subtextStyle: { color: "#425463", fontSize: text.subtitle },
           },
-          legend: { top: zoomed ? 62 : 44, data: ["2021", "2025"], textStyle: { fontSize: text.legend } },
+          legend: { top: zoomed ? 62 : 44, data: ["2021", "2026"], textStyle: { fontSize: text.legend } },
           tooltip: {
             trigger: "item",
             formatter: ({ seriesName, data: itemData }: { seriesName: string; data: [number, string] }) => `${seriesName}: ${itemData[0].toLocaleString("nb-NO")}`,
           },
           grid: { left: zoomed ? 450 : 360, right: zoomed ? 210 : 170, top: zoomChartTop, bottom: zoomed ? 58 : 42 },
           graphic: [
-            ...(nkomIndex >= 0
-              ? [
-                  {
-                    type: "rect",
-                    left: 0,
-                    top: zoomChartTop + nkomIndex * zoomRowHeight - 16,
-                    shape: { width: 5000, height: zoomRowHeight },
-                    style: { fill: "rgba(0,0,0,0)", stroke: "#1f6f8b", lineWidth: 2 },
-                    silent: true,
-                    z: 20,
-                  },
-                ]
-              : []),
             {
               type: "text",
               right: 20,
@@ -998,13 +1006,14 @@ export function ExternalSalaryDevelopmentChart({
               return {
                 type: "text",
                 right: 20,
-                top: zoomChartTop + index * zoomRowHeight + (zoomed ? 28 : 22),
+                top: zoomChartTop + rowBandHeight * (index + 0.5),
                 style: {
                   text: `${change >= 0 ? "+" : ""}${change.toLocaleString("nb-NO")}`,
                   fill: change >= 0 ? "#1f6f2b" : "#a734a7",
                   fontSize: text.strongLabel,
                   fontWeight: 700,
                   textAlign: "right",
+                  textVerticalAlign: "middle",
                 },
                 silent: true,
               };
@@ -1023,6 +1032,31 @@ export function ExternalSalaryDevelopmentChart({
             axisLabel: { width: zoomed ? 420 : 330, overflow: "truncate", fontSize: text.axis },
           },
           series: [
+            {
+              id: "nkom-highlight",
+              type: "custom",
+              coordinateSystem: "cartesian2d",
+              encode: { x: 0, y: 1 },
+              silent: true,
+              data: nkomIndex >= 0 ? [[0, "Nkom"]] : [],
+              renderItem: (params: any, api: any) => {
+                const coordSys = params.coordSys;
+                const point = api.coord([xAxisMin ?? 0, "Nkom"]);
+                const size = api.size([0, 1]);
+                const height = Math.max(36, size[1] * 0.92);
+                return {
+                  type: "rect",
+                  shape: {
+                    x: coordSys.x,
+                    y: point[1] - height / 2,
+                    width: coordSys.width + (zoomed ? 205 : 165),
+                    height,
+                  },
+                  style: { fill: "rgba(0,0,0,0)", stroke: "#1f6f8b", lineWidth: 2 },
+                  z: 20,
+                };
+              },
+            },
             ...data.map((row) => ({
               id: `line-${row["Avtale"]}-${row["Virksomhet"]}`,
               type: "line",
@@ -1053,7 +1087,7 @@ export function ExternalSalaryDevelopmentChart({
             },
             {
               id: "salary-2026",
-              name: "2025",
+              name: "2026",
               type: "scatter",
               data: data.map((row) => [Number(row["Lønn 2026"] ?? 0), row["Virksomhet"]]),
               symbolSize: 12,
@@ -1088,7 +1122,9 @@ export function ExternalComparisonToggleChart({
   exportFilename?: string;
   exportMetadata?: ExportMetadata[];
 }) {
-  const [selectedAgreement, setSelectedAgreement] = useState("Akademikerne/Unio");
+  const agreements = uniqueSorted(rows.map((row) => row["Avtale"]));
+  const [selectedAgreementState, setSelectedAgreement] = useState("Alle");
+  const selectedAgreement = agreements.includes(selectedAgreementState) ? selectedAgreementState : agreements[0] ?? "";
   const [exporting, setExporting] = useState(false);
   const chartRef = useRef<ReactECharts>(null);
   const data = rows
@@ -1099,6 +1135,8 @@ export function ExternalComparisonToggleChart({
     }))
     .filter((item) => item.value > 0)
     .sort((a, b) => b.value - a.value);
+  const maxValue = Math.max(...data.map((item) => item.value), 0);
+  const xAxisMax = maxValue > 0 ? Math.ceil((maxValue * 1.08) / 50_000) * 50_000 : undefined;
 
   async function handleExport() {
     if (!exportFilename) return;
@@ -1113,10 +1151,10 @@ export function ExternalComparisonToggleChart({
           { key: "Virksomhet", header: "Virksomhet" },
           { key: "Gjennomsnittslønn", header: "Gjennomsnittslønn" },
         ],
-        title: `${title} - ${selectedAgreement}`,
+        title: agreements.length > 1 ? `${title} - ${selectedAgreement}` : title,
         filename: exportFilename,
         sheetName: title,
-        metadata: [...exportMetadata, { label: "Avtale", value: selectedAgreement }],
+        metadata: agreements.length > 1 ? [...exportMetadata, { label: "Avtale", value: selectedAgreement }] : exportMetadata,
       });
     } finally {
       setExporting(false);
@@ -1129,25 +1167,28 @@ export function ExternalComparisonToggleChart({
         const text = chartTextSizes(zoomed);
         return (
         <>
-      <div className="chart-sort-toggle" aria-label="Velg avtale">
-        <button className={selectedAgreement === "Akademikerne/Unio" ? "active" : ""} type="button" aria-pressed={selectedAgreement === "Akademikerne/Unio"} onClick={() => setSelectedAgreement("Akademikerne/Unio")}>
-          Akademikerne/Unio
-        </button>
-        <button className={selectedAgreement === "LO Stat" ? "active" : ""} type="button" aria-pressed={selectedAgreement === "LO Stat"} onClick={() => setSelectedAgreement("LO Stat")}>
-          LO Stat
-        </button>
-      </div>
+      {agreements.length > 1 ? (
+        <div className="chart-sort-toggle" aria-label="Velg avtale">
+          {agreements.map((agreement) => (
+            <button className={selectedAgreement === agreement ? "active" : ""} type="button" aria-pressed={selectedAgreement === agreement} onClick={() => setSelectedAgreement(agreement)} key={agreement}>
+              {agreement}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <ChartExportActions exportFilename={exportFilename} exporting={exporting} onExcelExport={handleExport} chartRef={chartRef} />
       <ReactECharts
         ref={chartRef}
         notMerge
         style={{ height: zoomed ? "calc(94vh - 128px)" : Math.max(500, data.length * 30 + 96) }}
         option={{
-          title: { text: `${title} - ${selectedAgreement}`, left: 0, textStyle: { fontSize: text.title, fontWeight: 650 } },
+          title: { text: agreements.length > 1 ? `${title} - ${selectedAgreement}` : title, left: 0, textStyle: { fontSize: text.title, fontWeight: 650 } },
           tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-          grid: { left: zoomed ? 470 : 380, right: zoomed ? 60 : 34, top: zoomed ? 86 : 66, bottom: zoomed ? 44 : 30 },
+          grid: { left: zoomed ? 470 : 380, right: zoomed ? 110 : 86, top: zoomed ? 86 : 66, bottom: zoomed ? 44 : 30 },
           xAxis: {
             type: "value",
+            min: 0,
+            max: xAxisMax,
             axisLabel: { show: false, fontSize: text.axis },
           },
           yAxis: {
@@ -1209,14 +1250,17 @@ export function MatrixTable({
   const departmentColors = columnColumn === "Avdeling" ? createDepartmentColorMap(rows.map((row) => row[columnColumn])) : null;
   const departmentLegendEntries =
     columnColumn === "Avdeling"
-      ? columnNames.map((columnName) => {
-          const matchingRows = rows.filter((row) => String(row[columnColumn] ?? "") === columnName);
-          return {
-            name: columnName,
-            label: matrixEntryLabel(columnColumn, columnName, matchingRows),
-            color: departmentColor(columnName, departmentColors),
-          };
-        })
+      ? [
+          ...columnNames.map((columnName) => {
+            const matchingRows = rows.filter((row) => String(row[columnColumn] ?? "") === columnName);
+            return {
+              name: columnName,
+              label: matrixEntryLabel(columnColumn, columnName, matchingRows),
+              color: departmentColor(columnName, departmentColors),
+            };
+          }),
+          { name: "Total", label: "Total", color: totalColor },
+        ]
       : [];
   const matrixRows = rowNames
     .map((rowName) => {
@@ -1231,24 +1275,22 @@ export function MatrixTable({
           value: avg === null ? null : Math.round(avg),
         };
       });
-      if (columnColumn === "kjonn") {
-        const totalValues = numericSalaryValues(rowRows.map((row) => row[valueColumn]));
-        const avg = mean(totalValues);
-        const genderCount = entries.filter((entry) => entry.count > 0).length;
-        if (genderCount > 1) {
-          entries.push({
-            columnName: "Total",
-            label: "Total",
-            count: totalValues.length,
-            value: avg === null ? null : Math.round(avg),
-          });
-        }
+      const totalValues = numericSalaryValues(rowRows.map((row) => row[valueColumn]));
+      const avg = mean(totalValues);
+      if (entries.filter((entry) => entry.count > 0).length > 1) {
+        entries.push({
+          columnName: "Total",
+          label: "Total",
+          count: totalValues.length,
+          value: avg === null ? null : Math.round(avg),
+        });
       }
       const visibleEntries = entries
         .filter((entry) => entry.value !== null && (columnColumn !== "kjonn" || entry.count > 0))
         .sort((a, b) => {
           const fixedOrderA = matrixEntryOrder(columnColumn, a.columnName);
           const fixedOrderB = matrixEntryOrder(columnColumn, b.columnName);
+          if (a.columnName === "Total" || b.columnName === "Total") return a.columnName === "Total" ? 1 : -1;
           if (fixedOrderA !== null && fixedOrderB !== null) return fixedOrderA - fixedOrderB;
           return (b.value ?? 0) - (a.value ?? 0);
         });
@@ -1320,14 +1362,19 @@ export function MatrixTable({
           <h2>{title}</h2>
           <span>Gjennomsnittlig årslønn</span>
         </div>
+        <div className="table-actions" data-png-exclude="true">
+          <HelpPopover title={title}>
+            Total viser gjennomsnittet for raden etter aktive filtre. N i parentes er antall ansatte i beregningen.
+          </HelpPopover>
         {exportFilename ? (
-          <div className="table-actions" data-png-exclude="true">
+          <>
             <button className="table-export-button" disabled={exporting} onClick={handleExport} aria-label={exporting ? "Lager Excel" : "Eksporter Excel"} title="Eksporter Excel">
               <Download size={16} />
             </button>
             <PngExportButton className="table-export-button" targetRef={sectionRef} filename={pngFilenameFromExportFilename(exportFilename)} />
-          </div>
+          </>
         ) : null}
+        </div>
       </div>
       {departmentLegendEntries.length > 0 ? (
         <div className="department-color-legend" aria-label="Farger for avdelinger">
@@ -1350,9 +1397,9 @@ export function MatrixTable({
                 const maxValue = Math.max(...cardValues);
                 const range = Math.max(1, maxValue - minValue);
                 const width = maxValue === minValue ? 100 : 45 + (((value ?? 0) - minValue) / range) * 55;
-                const fillColor = columnColumn === "Avdeling" ? departmentColor(columnName, departmentColors) : columnColumn === "kjonn" ? genderColor(columnName) : undefined;
+                const fillColor = columnName === "Total" ? totalColor : columnColumn === "Avdeling" ? departmentColor(columnName, departmentColors) : columnColumn === "kjonn" ? genderColor(columnName) : undefined;
                 return (
-                  <div className="mini-bar-row" key={columnName}>
+                  <div className={columnName === "Total" ? "mini-bar-row total-row" : "mini-bar-row"} key={columnName}>
                     <span className="mini-bar-label" title={columnName}>
                       {label} ({count})
                     </span>

@@ -14,6 +14,7 @@ import { formatInt, toNumber } from "../lib/format";
 import { exportTableToPng, pngFilenameFromExportFilename } from "../lib/pngExport";
 import type { Row } from "../lib/types";
 import { exportRowsToXlsx, type ExportMetadata } from "../lib/xlsxExport";
+import { HelpPopover } from "./HelpPopover";
 import { PngExportButton } from "./PngExportButton";
 
 type Props = {
@@ -29,6 +30,7 @@ type Props = {
   hideSearch?: boolean;
   exportFilename?: string;
   exportMetadata?: ExportMetadata[];
+  helpText?: string;
 };
 
 function isSalaryColumn(name: string): boolean {
@@ -57,6 +59,14 @@ function formatCellValue(columnName: string, value: unknown): string {
   }
   if (isSalaryColumn(columnName) && toNumber(value) !== null) return formatInt(value).replace(/\u00a0/g, " ");
   return String(value);
+}
+
+function isTotalRow(row: Row): boolean {
+  return row.__rowType === "total" || String(row["Gruppe"] ?? "").toLocaleLowerCase("nb-NO") === "total";
+}
+
+function totalClassName(row: Row, rowClassName?: (row: Row) => string): string {
+  return [isTotalRow(row) ? "total-row" : "", rowClassName?.(row) ?? ""].filter(Boolean).join(" ");
 }
 
 function groupSortValue(value: unknown): number | null {
@@ -102,6 +112,7 @@ export function DataTable({
   hideSearch = false,
   exportFilename,
   exportMetadata = [],
+  helpText,
 }: Props) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
@@ -109,7 +120,7 @@ export function DataTable({
   const [hiddenColumnIds, setHiddenColumnIds] = useState<string[]>([]);
   const parentRef = useRef<HTMLDivElement>(null);
   const allColumns = useMemo(() => {
-    const hidden = new Set(hiddenColumns);
+    const hidden = new Set([...hiddenColumns, "__rowType"]);
     const names = Array.from(new Set(rows.flatMap((row) => Object.keys(row)))).filter((name) => !hidden.has(name));
     const filtered = names;
     const orderedNames =
@@ -140,8 +151,11 @@ export function DataTable({
     label: columnLabels[columnId] ?? columnId,
   }));
 
+  const totalRows = useMemo(() => rows.filter(isTotalRow), [rows]);
+  const bodyRows = useMemo(() => rows.filter((row) => !isTotalRow(row)), [rows]);
+
   const table = useReactTable({
-    data: rows,
+    data: bodyRows,
     columns: visibleColumns,
     state: { globalFilter, sorting },
     onGlobalFilterChange: setGlobalFilter,
@@ -152,7 +166,7 @@ export function DataTable({
   });
 
   const tableRows = table.getRowModel().rows;
-  const shouldShowSearch = !hideSearch && rows.length >= 20;
+  const shouldShowSearch = !hideSearch && bodyRows.length >= 20;
   const exportColumns = allColumns.map((column) => {
     const key = String(column.id);
     return { key, header: columnLabels[key] ?? key };
@@ -161,12 +175,23 @@ export function DataTable({
     const key = String(column.id);
     return { key, header: columnLabels[key] ?? key };
   });
-  const exportRows = tableRows.map((row) =>
-    Object.fromEntries(exportColumns.map((column) => [column.key, row.original[column.key]])),
-  );
-  const pngRows = tableRows.map((row) =>
-    Object.fromEntries(pngColumns.map((column) => [column.key, row.getValue(column.key)])),
-  );
+  const visibleTotalRows = totalRows.filter((row) => {
+    if (!globalFilter.trim()) return true;
+    const needle = globalFilter.toLocaleLowerCase("nb-NO");
+    return exportColumns.some((column) => String(row[column.key] ?? "").toLocaleLowerCase("nb-NO").includes(needle));
+  });
+  const exportRows = [
+    ...tableRows.map((row) =>
+      Object.fromEntries(exportColumns.map((column) => [column.key, row.original[column.key]])),
+    ),
+    ...visibleTotalRows.map((row) => Object.fromEntries(exportColumns.map((column) => [column.key, row[column.key]]))),
+  ];
+  const pngRows = [
+    ...tableRows.map((row) =>
+      Object.fromEntries(pngColumns.map((column) => [column.key, row.getValue(column.key)])),
+    ),
+    ...visibleTotalRows.map((row) => Object.fromEntries(pngColumns.map((column) => [column.key, row[column.key]]))),
+  ];
   const defaultColumnWidth = 150;
   const visibleColumnWidths = visibleColumns.map((column) => columnWidths[String(column.id)] ?? defaultColumnWidth);
   const tableWidth = Math.max(
@@ -204,10 +229,10 @@ export function DataTable({
       rows: pngRows,
       columns: pngColumns.map((column, index) => ({ ...column, width: visibleColumnWidths[index] })),
       title: title ?? "Tabell",
-      subtitle: `${tableRows.length.toLocaleString("nb-NO")} av ${rows.length.toLocaleString("nb-NO")} rader`,
+      subtitle: `${tableRows.length.toLocaleString("nb-NO")} av ${bodyRows.length.toLocaleString("nb-NO")} rader`,
       filename: pngFilenameFromExportFilename(exportFilename),
       metadata: exportMetadata,
-      rowClassNames: tableRows.map((row) => rowClassName?.(row.original) ?? ""),
+      rowClassNames: [...tableRows.map((row) => totalClassName(row.original, rowClassName)), ...visibleTotalRows.map((row) => totalClassName(row, rowClassName))],
       formatValue: formatCellValue,
     });
   }
@@ -227,10 +252,11 @@ export function DataTable({
         <div>
           {title ? <h2>{title}</h2> : null}
           <span>
-            {tableRows.length.toLocaleString("nb-NO")} av {rows.length.toLocaleString("nb-NO")} rader
+            {tableRows.length.toLocaleString("nb-NO")} av {bodyRows.length.toLocaleString("nb-NO")} rader
           </span>
         </div>
         <div className="table-actions">
+          {helpText ? <HelpPopover title={title ?? "Tabell"}>{helpText}</HelpPopover> : null}
           {shouldShowSearch ? (
             <label className="table-search" data-png-exclude="true">
               <Search size={16} />
@@ -268,7 +294,7 @@ export function DataTable({
           ) : null}
         </div>
       </div>
-      <div className="table-scroll" ref={parentRef} style={{ height }}>
+      <div className={`table-scroll${visibleTotalRows.length > 0 ? " has-total-footer" : ""}`} ref={parentRef} style={{ height }}>
         <table className="virtual-table" style={{ width: tableWidth }}>
           <thead style={{ width: tableWidth }}>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -311,7 +337,7 @@ export function DataTable({
               return (
                 <tr
                   key={row.id}
-                  className={rowClassName?.(row.original)}
+                  className={totalClassName(row.original, rowClassName)}
                   style={{
                     gridTemplateColumns,
                     transform: `translateY(${virtualRow.start}px)`,
@@ -330,6 +356,22 @@ export function DataTable({
               );
             })}
           </tbody>
+          {visibleTotalRows.length > 0 ? (
+            <tfoot style={{ width: tableWidth }}>
+              {visibleTotalRows.map((row, rowIndex) => (
+                <tr key={rowIndex} className={totalClassName(row, rowClassName)} style={{ gridTemplateColumns, width: tableWidth }}>
+                  {visibleColumns.map((column, index) => {
+                    const key = String(column.id);
+                    return (
+                      <td key={key} style={{ width: visibleColumnWidths[index], minWidth: visibleColumnWidths[index], maxWidth: visibleColumnWidths[index] }}>
+                        {formatCellValue(key, row[key])}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tfoot>
+          ) : null}
         </table>
       </div>
     </section>

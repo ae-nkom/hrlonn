@@ -230,7 +230,7 @@ export function salarySummary(rows: Row[], groupColumn: string): Row[] {
     const group = key(row[groupColumn]) || "Ukjent";
     groups.set(group, [...(groups.get(group) ?? []), row]);
   }
-  return Array.from(groups.entries())
+  const summaryRows = Array.from(groups.entries())
     .map(([group, groupRows]) => {
       const lagPct = mean(groupRows.map((row) => row["Avvik prosent"]));
       const lagKr = mean(groupRows.map((row) => row["Avvik kroner"]));
@@ -244,6 +244,18 @@ export function salarySummary(rows: Row[], groupColumn: string): Row[] {
       };
     })
     .sort((a, b) => Number(a["Avvik prosent"] ?? 999) - Number(b["Avvik prosent"] ?? 999));
+  const lagPct = mean(base.map((row) => row["Avvik prosent"]));
+  const lagKr = mean(base.map((row) => row["Avvik kroner"]));
+  const totalRow = {
+    __rowType: "total",
+    Gruppe: "Total",
+    Antall: base.length,
+    "Gjennomsnittslønn": Math.round(mean(base.map((row) => row["arslonn"])) ?? 0),
+    "Avvik prosent": lagPct === null ? null : Math.round(lagPct * 10) / 10,
+    "Avvik kroner": lagKr === null ? null : Math.round(lagKr),
+    "Grunnlag for å prioritere lokalt": lagPct !== null && lagPct < 0 ? "ja" : "nei",
+  };
+  return base.length > 0 ? [...summaryRows, totalRow] : summaryRows;
 }
 
 export function filterRows(rows: Row[], filters: Filters): Row[] {

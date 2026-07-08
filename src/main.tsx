@@ -171,105 +171,59 @@ const developmentTableColumnOrder = [
 const genderChartOrder = ["Mann", "Kvinne"];
 const seniorityChartOrder = ["0-2 år", "3-5 år", "6-10 år", "11-15 år", "16-20 år", "21 år eller mer"];
 const ageChartOrder = ["Under 30", "30-39", "40-49", "50-59", "60+"];
-const nkomAkadUnioExternalSalary = 820_972;
-const nkomLoStatExternalSalary = 720_569;
-
+const externalSalary2026: Array<[string, number]> = [
+  ["Havindustritilsynet", 1_158_293],
+  ["Finanstilsynet", 960_711],
+  ["Statens jernbanetilsyn", 1_032_150],
+  ["Statens helsetilsyn", 925_393],
+  ["Helsedirektoratet", 919_976],
+  ["Riksrevisjonen", 912_175],
+  ["Konkurransetilsynet", 920_575],
+  ["Jernbanedirektoratet", 927_522],
+  ["Nasjonal sikkerhetsmyndighet", 922_971],
+  ["Forsvarets forskningsinstitutt", 911_026],
+  ["Luftfartstilsynet", 910_450],
+  ["Norges vassdrags- og energidirektorat (NVE)", 883_610],
+  ["Datatilsynet", 867_464],
+  ["Nkom", 826_412],
+  ["Direktoratet for strålevern og atomsikkerhet", 858_277],
+  ["Folkehelseinstituttet", 853_651],
+  ["Direktoratet for samfunnssikkerhet og beredskap (DSB)", 832_430],
+  ["Digitaliseringsdirektoratet", 861_767],
+  ["Vegdirektoratet", 795_316],
+  ["Skattedirektoratet", 757_515],
+  ["Sjøfartsdirektoratet", 823_522],
+  ["Medietilsynet", 806_415],
+  ["Miljødirektoratet", 797_331],
+  ["Utdanningsdirektoratet", 802_689],
+  ["Direktoratet for arbeidstilsynet", 794_005],
+  ["Lotteri- og stiftelsestilsynet", 764_404],
+  ["Statistisk sentralbyrå", 776_826],
+  ["Politidirektoratet", 791_847],
+  ["Statsforvalteren i Agder", 763_704],
+  ["Forbrukertilsynet", 758_683],
+];
 function externalComparison(_rows: Row[]): Row[] {
-  const referenceRows: Record<string, Array<[string, number]>> = {
-    "Akademikerne/Unio": [
-      ["Havindustritilsynet", 1_145_964],
-      ["Finanstilsynet", 947_698],
-      ["Statens jernbanetilsyn", 933_502],
-      ["Statens helsetilsyn", 922_407],
-      ["Helsedirektoratet", 900_273],
-      ["Riksrevisjonen", 893_473],
-      ["Konkurransetilsynet", 892_949],
-      ["Jernbanedirektoratet", 886_110],
-      ["Nasjonal sikkerhetsmyndighet", 885_543],
-      ["Forsvarets forskningsinstitutt", 879_611],
-      ["Luftfartstilsynet", 877_272],
-      ["Norges vassdrags- og energidirektorat (NVE)", 873_254],
-      ["Datatilsynet", 868_723],
-      ["Nkom", nkomAkadUnioExternalSalary],
-      ["Direktoratet for strålevern og atomsikkerhet", 858_078],
-      ["Folkehelseinstituttet", 856_274],
-      ["Direktoratet for samfunnssikkerhet og beredskap (DSB)", 848_289],
-      ["Digitaliseringsdirektoratet", 843_897],
-      ["Vegdirektoratet", 816_701],
-      ["Skattedirektoratet", 815_370],
-      ["Sjøfartsdirektoratet", 801_152],
-      ["Medietilsynet", 792_569],
-      ["Miljødirektoratet", 787_430],
-      ["Utdanningsdirektoratet", 786_647],
-      ["Direktoratet for arbeidstilsynet", 783_160],
-      ["Lotteri- og stiftelsestilsynet", 778_657],
-      ["Statistisk sentralbyrå", 765_699],
-      ["Politidirektoratet", 761_742],
-      ["Statsforvalteren i Agder", 731_219],
-      ["Forbrukertilsynet", 695_195],
-    ],
-    "LO Stat": [
-      ["Luftfartstilsynet", 898_618],
-      ["Havindustritilsynet", 884_960],
-      ["Nasjonal sikkerhetsmyndighet", 834_829],
-      ["Finanstilsynet", 814_321],
-      ["Datatilsynet", 811_849],
-      ["Riksrevisjonen", 780_309],
-      ["Helsedirektoratet", 775_978],
-      ["Norges vassdrags- og energidirektorat (NVE)", 761_337],
-      ["Medietilsynet", 751_606],
-      ["Statens jernbanetilsyn", 747_731],
-      ["Konkurransetilsynet", 742_659],
-      ["Digitaliseringsdirektoratet", 741_995],
-      ["Folkehelseinstituttet", 739_466],
-      ["Miljødirektoratet", 736_961],
-      ["Nkom", nkomLoStatExternalSalary],
-      ["Utdanningsdirektoratet", 715_604],
-      ["Statistisk sentralbyrå", 713_204],
-      ["Forsvarets forskningsinstitutt", 703_981],
-      ["Vegdirektoratet", 700_883],
-      ["Direktoratet for samfunnssikkerhet og beredskap (DSB)", 697_516],
-      ["Direktoratet for arbeidstilsynet", 690_607],
-      ["Statens helsetilsyn", 682_720],
-      ["Skattedirektoratet", 680_321],
-      ["Statsforvalteren i Agder", 678_868],
-      ["Jernbanedirektoratet", 671_936],
-      ["Sjøfartsdirektoratet", 663_957],
-      ["Politidirektoratet", 650_822],
-      ["Forbrukertilsynet", 637_041],
-      ["Lotteri- og stiftelsestilsynet", 623_784],
-    ],
-  };
-  return Object.entries(referenceRows).flatMap(([avtale, avtaleRows]) =>
-    [...avtaleRows]
-      .sort((a, b) => b[1] - a[1])
-      .map(([virksomhet, gjennomsnittslonn], index) => ({
-        Avtale: avtale,
-        Rangering: index + 1,
-        Virksomhet: virksomhet,
-        Gjennomsnittslønn: gjennomsnittslonn,
-      })),
-  );
+  return [...externalSalary2026]
+    .sort((a, b) => b[1] - a[1])
+    .map(([virksomhet, gjennomsnittslonn], index) => ({
+      Avtale: "Alle",
+      Rangering: index + 1,
+      Virksomhet: virksomhet,
+      Gjennomsnittslønn: gjennomsnittslonn,
+    }));
 }
 
 function externalDevelopment(_rows: Row[]): Row[] {
   return [
-    { Avtale: "Akademikerne/Unio", Virksomhet: "Konkurransetilsynet", "Lønn 2021": 671_955, "Lønn 2026": 892_949 },
-    { Avtale: "Akademikerne/Unio", Virksomhet: "Nasjonal sikkerhetsmyndighet", "Lønn 2021": 724_248, "Lønn 2026": 885_543 },
-    { Avtale: "Akademikerne/Unio", Virksomhet: "Luftfartstilsynet", "Lønn 2021": 765_326, "Lønn 2026": 877_272 },
-    { Avtale: "Akademikerne/Unio", Virksomhet: "Datatilsynet", "Lønn 2021": 688_604, "Lønn 2026": 868_723 },
-    { Avtale: "Akademikerne/Unio", Virksomhet: "Nkom", "Lønn 2021": 713_034, "Lønn 2026": nkomAkadUnioExternalSalary },
-    { Avtale: "Akademikerne/Unio", Virksomhet: "Direktoratet for samfunnssikkerhet og beredskap (DSB)", "Lønn 2021": 762_607, "Lønn 2026": 848_289 },
-    { Avtale: "Akademikerne/Unio", Virksomhet: "Digitaliseringsdirektoratet", "Lønn 2021": 721_902, "Lønn 2026": 843_897 },
-    { Avtale: "Akademikerne/Unio", Virksomhet: "Statsforvalteren i Agder", "Lønn 2021": 619_603, "Lønn 2026": 731_219 },
-    { Avtale: "LO Stat", Virksomhet: "Luftfartstilsynet", "Lønn 2021": 750_799, "Lønn 2026": 898_618 },
-    { Avtale: "LO Stat", Virksomhet: "Nasjonal sikkerhetsmyndighet", "Lønn 2021": 713_726, "Lønn 2026": 834_829 },
-    { Avtale: "LO Stat", Virksomhet: "Datatilsynet", "Lønn 2021": 711_897, "Lønn 2026": 811_849 },
-    { Avtale: "LO Stat", Virksomhet: "Konkurransetilsynet", "Lønn 2021": 744_144, "Lønn 2026": 742_659 },
-    { Avtale: "LO Stat", Virksomhet: "Digitaliseringsdirektoratet", "Lønn 2021": 659_033, "Lønn 2026": 741_995 },
-    { Avtale: "LO Stat", Virksomhet: "Nkom", "Lønn 2021": 665_868, "Lønn 2026": nkomLoStatExternalSalary },
-    { Avtale: "LO Stat", Virksomhet: "Direktoratet for samfunnssikkerhet og beredskap (DSB)", "Lønn 2021": 618_093, "Lønn 2026": 697_516 },
-    { Avtale: "LO Stat", Virksomhet: "Statsforvalteren i Agder", "Lønn 2021": 577_997, "Lønn 2026": 678_868 },
+    { Avtale: "Alle", Virksomhet: "Konkurransetilsynet", "Lønn 2021": 671_955, "Lønn 2026": 920_575 },
+    { Avtale: "Alle", Virksomhet: "Nasjonal sikkerhetsmyndighet", "Lønn 2021": 724_248, "Lønn 2026": 922_971 },
+    { Avtale: "Alle", Virksomhet: "Luftfartstilsynet", "Lønn 2021": 765_326, "Lønn 2026": 910_450 },
+    { Avtale: "Alle", Virksomhet: "Datatilsynet", "Lønn 2021": 688_604, "Lønn 2026": 867_464 },
+    { Avtale: "Alle", Virksomhet: "Nkom", "Lønn 2021": 713_034, "Lønn 2026": 826_412 },
+    { Avtale: "Alle", Virksomhet: "Direktoratet for samfunnssikkerhet og beredskap (DSB)", "Lønn 2021": 762_607, "Lønn 2026": 832_430 },
+    { Avtale: "Alle", Virksomhet: "Digitaliseringsdirektoratet", "Lønn 2021": 721_902, "Lønn 2026": 861_767 },
+    { Avtale: "Alle", Virksomhet: "Statsforvalteren i Agder", "Lønn 2021": 619_603, "Lønn 2026": 763_704 },
   ];
 }
 
@@ -580,6 +534,7 @@ function App() {
                 categoryLabelWidth={280}
                 hideXAxisValues
                 showCountInside
+                includeTotal
                 exportFilename="Oversikt - årslønn per avdeling.xlsx"
               />
               <DistributionChart rows={overviewRows} exportFilename="Oversikt - lønnsnivå etter alder.xlsx" />
@@ -592,6 +547,7 @@ function App() {
               columnLabels={overviewColumnLabels}
               initialSorting={overviewInitialSorting}
               exportFilename="Oversikt - analysegrunnlag.xlsx"
+              helpText="Tabellen viser personradene som inngår etter årets 2.5.1-utvalg. Grafer og nøkkeltall beregnes fra de samme radene."
             />
           </>
         ) : null}
@@ -647,9 +603,9 @@ function App() {
             <FilterBar options={salaryLevelOptions} filters={salaryLevelFilters} setFilters={updateSalaryLevelFilters} onReset={() => setSalaryLevelFilters(emptyFilters)} />
             <div className="two-col">
               <ColumnChart rows={salaryLevelRows} groupColumn="kjonn" valueColumn="arslonn" title="Lønnsnivå fordelt på kjønn" color="#1f6f8b" order={genderChartOrder} includeTotal exportFilename="Lønnsnivå - kjønn.xlsx" exportMetadata={salaryLevelExportMetadata} />
-              <ColumnChart rows={salaryLevelRows} groupColumn="Ansiennitetsgruppe" valueColumn="arslonn" title="Lønnsnivå fordelt på ansiennitet" color="#bd5b18" order={seniorityChartOrder} exportFilename="Lønnsnivå - ansiennitet.xlsx" exportMetadata={salaryLevelExportMetadata} />
+              <ColumnChart rows={salaryLevelRows} groupColumn="Ansiennitetsgruppe" valueColumn="arslonn" title="Lønnsnivå fordelt på ansiennitet" color="#bd5b18" order={seniorityChartOrder} includeTotal exportFilename="Lønnsnivå - ansiennitet.xlsx" exportMetadata={salaryLevelExportMetadata} />
             </div>
-            <BarChart rows={salaryLevelRows} groupColumn="stilling" valueColumn="arslonn" title="Lønnsnivå fordelt på stilling" color="#2f7d55" hideXAxisValues showCountInside exportFilename="Lønnsnivå - stilling.xlsx" exportMetadata={salaryLevelExportMetadata} />
+            <BarChart rows={salaryLevelRows} groupColumn="stilling" valueColumn="arslonn" title="Lønnsnivå fordelt på stilling" color="#2f7d55" hideXAxisValues showCountInside includeTotal exportFilename="Lønnsnivå - stilling.xlsx" exportMetadata={salaryLevelExportMetadata} />
           </>
         ) : null}
         {model && page === "presentasjon" ? (
@@ -740,6 +696,7 @@ function PresentationPage({
               showFullCategoryLabels
               showCountInside
               barMaxWidth={28}
+              includeTotal
               exportFilename="Presentasjon - lønnsnivå avdelinger.xlsx"
               exportMetadata={exportMetadata}
             />
@@ -783,6 +740,7 @@ function PresentationPage({
             hideSearch
             exportFilename="Presentasjon - tariff lønnsnivå.xlsx"
             exportMetadata={exportMetadata}
+            helpText="Totalraden nederst er gjennomsnitt for valgt utvalg etter aktive filtre. Den er personvektet, ikke et snitt av gruppesnittene."
           />
         </>
       ) : null}
@@ -800,6 +758,7 @@ function PresentationPage({
               hideSearch
               exportFilename="Presentasjon - lønnsutvikling menn og kvinner.xlsx"
               exportMetadata={exportMetadata}
+              helpText="Rød rad betyr negativt avvik fra KPI-justert referanselønn. Grønn rad betyr positivt avvik. Totalraden er beregnet fra personradene i valgt utvalg."
             />
             <DataTable
               rows={salarySummary(filteredSalaryRows, "Ansiennitetsgruppe")}
@@ -812,6 +771,7 @@ function PresentationPage({
               hideSearch
               exportFilename="Presentasjon - lønnsutvikling ansiennitetsgrupper.xlsx"
               exportMetadata={exportMetadata}
+              helpText="Avvik viser dagens lønn mot KPI-justert referanselønn. Totalraden nederst beregnes fra alle ansatte i valgt utvalg."
             />
           </div>
           <DataTable
@@ -825,13 +785,14 @@ function PresentationPage({
             hideSearch
             exportFilename="Presentasjon - lønnsutvikling aldersgrupper.xlsx"
             exportMetadata={exportMetadata}
+            helpText="Avvik viser dagens lønn mot KPI-justert referanselønn. Totalraden nederst beregnes fra alle ansatte i valgt utvalg."
           />
         </>
       ) : null}
       {view === "external" ? (
         <>
-          <ExternalComparisonToggleChart rows={comparison} title="Lønnsnivå sammenlignbare virksomheter - foreløpig 2025-tall" exportFilename="Presentasjon - ekstern sammenligning lønnsnivå.xlsx" />
-          <ExternalSalaryDevelopmentChart rows={externalDevelopmentRows} title="Lønnsutvikling utvalgte virksomheter - foreløpig 2025-tall" exportFilename="Presentasjon - ekstern sammenligning lønnsutvikling.xlsx" />
+          <ExternalComparisonToggleChart rows={comparison} title="Lønnsnivå sammenlignbare virksomheter - 2026-tall" exportFilename="Presentasjon - ekstern sammenligning lønnsnivå.xlsx" />
+          <ExternalSalaryDevelopmentChart rows={externalDevelopmentRows} title="Lønnsutvikling utvalgte virksomheter - 2021 til 2026" exportFilename="Presentasjon - ekstern sammenligning lønnsutvikling.xlsx" />
         </>
       ) : null}
     </>
