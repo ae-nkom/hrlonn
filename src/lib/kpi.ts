@@ -41,6 +41,9 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error("Klarte ikke hente KPI fra SSB: forespørselen tidsavbrøt. Prøv igjen senere.");
     }
+    if (err instanceof TypeError && err.message === "Failed to fetch") {
+      throw new Error("Klarte ikke hente KPI fra SSB. SSB er trolig midlertidig utilgjengelig, eller nettleseren blokkerte feilresponsen fra SSB. Prøv igjen senere.");
+    }
     throw err;
   } finally {
     globalThis.clearTimeout(timeout);
