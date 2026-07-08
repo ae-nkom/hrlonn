@@ -1,8 +1,9 @@
 import { toInt } from "./format";
 import type { Row, StoredBundle } from "./types";
 
-const SSB_KPI_TABLE_URL = "https://data.ssb.no/api/v0/no/table/14700";
+const SSB_KPI_DATA_URL = "https://data.ssb.no/api/pxwebapi/v2/tables/14700/data";
 const TARGET_MONTH = 5;
+const KPI_FETCH_TIMEOUT_MS = 20_000;
 
 const monthNames: Record<number, string> = {
   1: "januar",
@@ -30,14 +31,21 @@ function uniqueReferenceYears(referanselonn: Row[]): number[] {
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) throw new Error(`Klarte ikke hente KPI fra SSB (${response.status})`);
-  return response.json() as Promise<T>;
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), KPI_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) throw new Error(`Klarte ikke hente KPI fra SSB (${response.status})`);
+    return response.json() as Promise<T>;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Klarte ikke hente KPI fra SSB: forespørselen tidsavbrøt. Prøv igjen senere.");
+    }
+    throw err;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
 }
-
-type SsbMetadata = {
-  variables: Array<{ code: string; values: string[] }>;
-};
 
 type SsbJsonStat = {
   dimension: {
@@ -50,24 +58,20 @@ type SsbJsonStat = {
   value: number[];
 };
 
+function kpiDataUrl(periodCodes: string[]) {
+  const params = new URLSearchParams();
+  params.set("lang", "no");
+  params.set("valueCodes[Tid]", periodCodes.join(","));
+  params.set("valueCodes[VareTjenesteGrp]", "00");
+  params.set("valueCodes[ContentsCode]", "KpiIndMnd");
+  return `${SSB_KPI_DATA_URL}?${params.toString()}`;
+}
+
 export async function buildKpiRows(referanselonn: Row[], targetYear = new Date().getFullYear()): Promise<Row[]> {
   const refYears = uniqueReferenceYears(referanselonn);
   if (refYears.length === 0) return [];
 
-  const metadata = await fetchJson<SsbMetadata>(SSB_KPI_TABLE_URL);
-  const tidValues = metadata.variables.find((variable) => variable.code === "Tid")?.values ?? [];
-  const availableTargetMonths = tidValues
-    .filter((value) => value.startsWith(`${targetYear}M`))
-    .map((value) => Number(value.replace(`${targetYear}M`, "")))
-    .filter((month) => Number.isInteger(month) && month <= TARGET_MONTH)
-    .sort((a, b) => a - b);
-  if (availableTargetMonths.length === 0) {
-    throw new Error(`SSB-tabell 14700 mangler KPI-måneder for ${targetYear}`);
-  }
-
-  const targetMonth = availableTargetMonths.includes(TARGET_MONTH)
-    ? TARGET_MONTH
-    : availableTargetMonths[availableTargetMonths.length - 1];
+  const targetMonth = TARGET_MONTH;
   const targetCode = `${targetYear}M${String(targetMonth).padStart(2, "0")}`;
   const januaryCode = `${targetYear}M01`;
   const requestedCodes = Array.from(
@@ -78,19 +82,7 @@ export async function buildKpiRows(referanselonn: Row[], targetYear = new Date()
     ]),
   );
 
-  const query = {
-    query: [
-      { code: "VareTjenesteGrp", selection: { filter: "item", values: ["00"] } },
-      { code: "ContentsCode", selection: { filter: "item", values: ["KpiIndMnd"] } },
-      { code: "Tid", selection: { filter: "item", values: requestedCodes } },
-    ],
-    response: { format: "JSON-stat2" },
-  };
-  const data = await fetchJson<SsbJsonStat>(SSB_KPI_TABLE_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(query),
-  });
+  const data = await fetchJson<SsbJsonStat>(kpiDataUrl(requestedCodes));
   const kpiValues = Object.fromEntries(
     Object.entries(data.dimension.Tid.category.index).map(([code, position]) => [code, Number(data.value[position])]),
   );
