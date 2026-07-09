@@ -1,17 +1,12 @@
 import { toInt } from "./format";
 import type { Row, StoredBundle } from "./types";
+import fallbackKpiCsv from "../../data/kpi_historie.csv?raw";
 
 const SSB_KPI_DATA_URL = "https://data.ssb.no/api/pxwebapi/v2/tables/14700/data";
+const REFERENCE_START_YEAR = 2021;
+const REFERENCE_START_MONTH = 5;
 const TARGET_MONTH = 5;
 const KPI_FETCH_TIMEOUT_MS = 20_000;
-const fallbackKpiReferencePaths2026 = new Map<number, number>([
-  [2021, 23.5],
-  [2022, 16.6],
-  [2023, 9.5],
-  [2024, 6.3],
-  [2025, 3.1],
-  [2026, 1.4],
-]);
 
 const monthNames: Record<number, string> = {
   1: "januar",
@@ -28,14 +23,38 @@ const monthNames: Record<number, string> = {
   12: "desember",
 };
 
-function uniqueReferenceYears(referanselonn: Row[]): number[] {
-  return Array.from(
-    new Set(
-      referanselonn
-        .map((row) => toInt(row["ref_ar"] ?? row["Referanseår"]))
-        .filter((year): year is number => year !== null),
-    ),
-  ).sort((a, b) => a - b);
+const monthColumnToNumber = new Map(Object.entries(monthNames).map(([number, name]) => [name.toLocaleLowerCase("nb-NO"), Number(number)]));
+
+function periodCode(year: number, month: number): string {
+  return `${year}M${String(month).padStart(2, "0")}`;
+}
+
+function periodLabel(code: string): string {
+  const period = parsePeriodCode(code);
+  if (!period) return code;
+  return `${monthNames[period.month]} ${period.year}`;
+}
+
+function parsePeriodCode(code: string): { year: number; month: number } | null {
+  const match = code.match(/^(\d{4})M(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+function monthlyPeriodCodes(startYear: number, startMonth: number, endYear: number, endMonth: number): string[] {
+  const codes: string[] = [];
+  for (let year = startYear, month = startMonth; year < endYear || (year === endYear && month <= endMonth);) {
+    codes.push(periodCode(year, month));
+    month += 1;
+    if (month > 12) {
+      year += 1;
+      month = 1;
+    }
+  }
+  return codes;
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -78,93 +97,89 @@ function kpiDataUrl(periodCodes: string[]) {
   return `${SSB_KPI_DATA_URL}?${params.toString()}`;
 }
 
-function kpiRowFromReferencePath(year: number, targetYear: number, targetMonth: number, referencePath: number, source: "ssb" | "fallback", kpiValues?: Record<string, number>): Row {
-  const targetCode = `${targetYear}M${String(targetMonth).padStart(2, "0")}`;
-  const januaryCode = `${targetYear}M01`;
-  const referenceCode = year === targetYear ? januaryCode : `${year}M${String(targetMonth).padStart(2, "0")}`;
-  const referenceKpi = source === "ssb" ? kpiValues?.[referenceCode] : null;
-  const targetKpi = source === "ssb" ? kpiValues?.[targetCode] : null;
+function kpiRowFromReferencePath(referenceCode: string, targetCode: string, referencePath: number, source: "ssb" | "fallback", kpiValues?: Record<string, number>): Row {
+  const referencePeriod = parsePeriodCode(referenceCode);
+  const targetPeriod = parsePeriodCode(targetCode);
+  const referenceKpi = kpiValues?.[referenceCode] ?? null;
+  const targetKpi = kpiValues?.[targetCode] ?? null;
 
   return {
-    Periode: year === targetYear
-      ? `KPI januar-${monthNames[targetMonth]} ${targetYear}`
-      : `KPI ${monthNames[targetMonth]} ${year}-${targetYear}`,
+    Periode: `KPI ${periodLabel(referenceCode)}-${periodLabel(targetCode)}`,
     Referansebane: referencePath,
-    Referanseår: year,
+    Referanseår: referencePeriod?.year ?? null,
+    ReferansemånedNr: referencePeriod?.month ?? null,
     Referansemåned: referenceCode,
     Sluttmåned: targetCode,
     "_kpi_referanse": referenceKpi,
     "_kpi_slutt": targetKpi,
     "_kpi_kilde": source,
-    Målår: targetYear,
-    Målmåned: targetMonth,
+    Målår: targetPeriod?.year ?? null,
+    Målmåned: targetPeriod?.month ?? null,
   };
 }
 
-function fallbackKpiRows(refYears: number[], targetYear: number, targetMonth: number): Row[] | null {
-  if (targetYear !== 2026 || targetMonth !== 5) return null;
-  const coveredYears = refYears.filter((year) => fallbackKpiReferencePaths2026.has(year));
-  if (coveredYears.length === 0) return null;
-  return coveredYears.map((year) => kpiRowFromReferencePath(year, targetYear, targetMonth, fallbackKpiReferencePaths2026.get(year) ?? 0, "fallback"));
+function parseCsvNumber(value: string | undefined): number | null {
+  const text = String(value ?? "").trim();
+  if (!text || text === ".") return null;
+  const parsed = Number(text.replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function fallbackKpiValuesFromCsv(): Record<string, number> {
+  const rows = fallbackKpiCsv.trim().split(/\r?\n/).filter(Boolean);
+  const header = rows[0]?.split(";").map((cell) => cell.trim()) ?? [];
+  const values: Record<string, number> = {};
+  for (const line of rows.slice(1)) {
+    const cells = line.split(";");
+    const year = toInt(cells[0]);
+    if (year === null) continue;
+    for (let index = 1; index < header.length; index += 1) {
+      const month = monthColumnToNumber.get(header[index].toLocaleLowerCase("nb-NO"));
+      if (!month) continue;
+      const value = parseCsvNumber(cells[index]);
+      if (value !== null) values[periodCode(year, month)] = value;
+    }
+  }
+  return values;
+}
+
+function kpiRowsFromValues(referenceCodes: string[], targetCode: string, source: "ssb" | "fallback", kpiValues: Record<string, number>): Row[] {
+  const targetKpi = kpiValues[targetCode];
+  if (!Number.isFinite(targetKpi)) throw new Error(`KPI-grunnlaget mangler sluttverdi for ${targetCode}`);
+  return referenceCodes.map((referenceCode) => {
+    const referenceKpi = kpiValues[referenceCode];
+    if (!Number.isFinite(referenceKpi)) throw new Error(`KPI-grunnlaget mangler referanseverdi for ${referenceCode}`);
+    const referencePath = Math.round(((targetKpi / referenceKpi - 1) * 100) * 10) / 10;
+    return kpiRowFromReferencePath(referenceCode, targetCode, referencePath, source, kpiValues);
+  });
 }
 
 function kpiFallbackError(targetYear: number) {
-  return new Error(`Klarte ikke hente KPI fra SSB. Lokalt fallbackgrunnlag finnes bare for målår 2026, men valgt målår er ${targetYear}.`);
+  return new Error(`Klarte ikke hente KPI fra SSB. Lokalt fallbackgrunnlag finnes bare til og med mai 2026, men valgt målår er ${targetYear}.`);
 }
 
-export async function buildKpiRows(referanselonn: Row[], targetYear = new Date().getFullYear()): Promise<Row[]> {
-  const refYears = uniqueReferenceYears(referanselonn);
-  if (refYears.length === 0) return [];
-
+export async function buildKpiRows(_referanselonn: Row[], targetYear = new Date().getFullYear()): Promise<Row[]> {
   const targetMonth = TARGET_MONTH;
-  const targetCode = `${targetYear}M${String(targetMonth).padStart(2, "0")}`;
-  const januaryCode = `${targetYear}M01`;
-  const requestedCodes = Array.from(
-    new Set([
-      ...refYears.map((year) => (year === targetYear ? januaryCode : `${year}M${String(targetMonth).padStart(2, "0")}`)),
-      januaryCode,
-      targetCode,
-    ]),
-  );
+  const targetCode = periodCode(targetYear, targetMonth);
+  const referenceCodes = monthlyPeriodCodes(REFERENCE_START_YEAR, REFERENCE_START_MONTH, targetYear, targetMonth);
 
   let data: SsbJsonStat;
   try {
-    data = await fetchJson<SsbJsonStat>(kpiDataUrl(requestedCodes));
+    data = await fetchJson<SsbJsonStat>(kpiDataUrl(referenceCodes));
   } catch (err) {
-    const fallbackRows = fallbackKpiRows(refYears, targetYear, targetMonth);
-    if (fallbackRows) return fallbackRows;
-    if (targetYear !== 2026) throw kpiFallbackError(targetYear);
-    throw err;
+    if (targetYear !== 2026 || targetMonth !== 5) throw kpiFallbackError(targetYear);
+    return kpiRowsFromValues(referenceCodes, targetCode, "fallback", fallbackKpiValuesFromCsv());
   }
 
   const kpiValues = Object.fromEntries(
     Object.entries(data.dimension.Tid.category.index).map(([code, position]) => [code, Number(data.value[position])]),
   );
-  const targetKpi = kpiValues[targetCode];
-  const januaryKpi = kpiValues[januaryCode];
-  if (!Number.isFinite(targetKpi) || !Number.isFinite(januaryKpi)) {
-    const fallbackRows = fallbackKpiRows(refYears, targetYear, targetMonth);
-    if (fallbackRows) return fallbackRows;
-    if (targetYear !== 2026) throw kpiFallbackError(targetYear);
-    throw new Error("SSB-responsen mangler forventede KPI-verdier");
+  try {
+    return kpiRowsFromValues(referenceCodes, targetCode, "ssb", kpiValues);
+  } catch (err) {
+    if (targetYear !== 2026 || targetMonth !== 5) throw err;
+    return kpiRowsFromValues(referenceCodes, targetCode, "fallback", fallbackKpiValuesFromCsv());
   }
-
-  const missingReferenceCode = refYears
-    .map((year) => (year === targetYear ? januaryCode : `${year}M${String(targetMonth).padStart(2, "0")}`))
-    .find((referenceCode) => !Number.isFinite(kpiValues[referenceCode]));
-  if (missingReferenceCode) {
-    const fallbackRows = fallbackKpiRows(refYears, targetYear, targetMonth);
-    if (fallbackRows) return fallbackRows;
-    if (targetYear !== 2026) throw kpiFallbackError(targetYear);
-    throw new Error(`SSB-responsen mangler KPI-verdi for ${missingReferenceCode}`);
-  }
-
-  return refYears.map((year) => {
-    const referenceCode = year === targetYear ? januaryCode : `${year}M${String(targetMonth).padStart(2, "0")}`;
-    const referenceKpi = year === targetYear ? januaryKpi : kpiValues[referenceCode];
-    const referencePath = Math.round(((targetKpi / referenceKpi - 1) * 100) * 10) / 10;
-    return kpiRowFromReferencePath(year, targetYear, targetMonth, referencePath, "ssb", kpiValues);
-  });
 }
 
 export async function withFreshKpiDataset(bundle: StoredBundle, targetYear = new Date().getFullYear()): Promise<StoredBundle> {
@@ -188,5 +203,7 @@ export function kpiDatasetNeedsRefresh(bundle: StoredBundle, now = new Date()): 
   const rows = bundle.tables.kpi ?? [];
   if (rows.length === 0) return (bundle.tables.referanselonn ?? []).length > 0;
   const targetYear = now.getFullYear();
-  return rows.some((row) => toInt(row["Målår"]) !== targetYear);
+  const expectedCodes = monthlyPeriodCodes(REFERENCE_START_YEAR, REFERENCE_START_MONTH, targetYear, TARGET_MONTH);
+  const existingCodes = new Set(rows.map((row) => String(row["Referansemåned"] ?? "")));
+  return rows.some((row) => toInt(row["Målår"]) !== targetYear) || expectedCodes.some((code) => !existingCodes.has(code));
 }

@@ -64,10 +64,26 @@ function salaryValue(sapRow: Row): number | null {
   return toInt(sapRow["1006-Årslønn lederlønnstab."]) ?? individual;
 }
 
-function referencePath(year: unknown, kpiByReferenceYear: Map<number, number>): number | null {
+function referenceMonthNumber(year: unknown, month: unknown): number | null {
+  const text = key(month);
+  const period = text.match(/^\d{4}M(\d{2})$/);
+  if (period) return Number(period[1]);
+  if (month instanceof Date && toInt(year) === month.getFullYear()) return month.getMonth() + 1;
+  return toInt(month);
+}
+
+function referenceMonthCode(year: unknown, month: unknown): string | null {
   const parsed = toInt(year);
   if (parsed === null) return null;
-  return kpiByReferenceYear.get(parsed) ?? null;
+  const parsedMonth = referenceMonthNumber(year, month) ?? 5;
+  if (parsedMonth < 1 || parsedMonth > 12) return null;
+  return `${parsed}M${String(parsedMonth).padStart(2, "0")}`;
+}
+
+function referencePath(year: unknown, month: unknown, kpiByReferenceMonth: Map<string, number>): number | null {
+  const referenceCode = referenceMonthCode(year, month);
+  if (!referenceCode) return null;
+  return kpiByReferenceMonth.get(referenceCode) ?? null;
 }
 
 export function buildModel(bundle: StoredBundle): AppModel {
@@ -76,10 +92,10 @@ export function buildModel(bundle: StoredBundle): AppModel {
   const org = bundle.tables.org_tilordning ?? [];
   const medarbeidere = bundle.tables.medarbeiderdata ?? [];
   const kpiRows = bundle.tables.kpi ?? [];
-  const kpiByReferenceYear = new Map(
+  const kpiByReferenceMonth = new Map(
     kpiRows
-      .map((row): [number | null, number | null] => [toInt(row["Referanseår"]), toNumber(row["Referansebane"])])
-      .filter((entry): entry is [number, number] => entry[0] !== null && entry[1] !== null),
+      .map((row): [string, number | null] => [key(row["Referansemåned"]), toNumber(row["Referansebane"])])
+      .filter((entry): entry is [string, number] => Boolean(entry[0]) && entry[1] !== null),
   );
   const sectionLookup = buildSectionLookup(bundle.tables.avdelingsdata_raw ?? []);
   const orgByInitial = byInitial(org);
@@ -88,6 +104,7 @@ export function buildModel(bundle: StoredBundle): AppModel {
     referanselonn.map((row) => ({
       Initialer: row["init"] ?? row["Initialer"],
       "Referanseår": toInt(row["ref_ar"]),
+      "ReferansemånedNr": referenceMonthNumber(row["ref_ar"], row["ref_mnd"] ?? row["ReferansemånedNr"] ?? row["Referansemåned"]),
       "Referanselønn": toInt(row["ref_lonn"]),
       Navn: row["navn"],
     })),
@@ -103,7 +120,7 @@ export function buildModel(bundle: StoredBundle): AppModel {
     const lonn = salaryValue(sapRow);
     const refLonn = toInt(refRow["Referanselønn"]);
     const lonnKroner = lonn !== null && refLonn !== null ? lonn - refLonn : null;
-    const referansebane = referencePath(refRow["Referanseår"], kpiByReferenceYear);
+    const referansebane = referencePath(refRow["Referanseår"], refRow["ReferansemånedNr"], kpiByReferenceMonth);
     const kpiJustertRef = refLonn !== null && referansebane !== null ? refLonn * (1 + referansebane / 100) : null;
     const avvikKroner = lonn !== null && kpiJustertRef !== null ? Math.round(lonn - kpiJustertRef) : null;
     const avvikProsent = lonn !== null && kpiJustertRef ? Math.round(((lonn - kpiJustertRef) / kpiJustertRef) * 1000) / 10 : null;
@@ -126,6 +143,7 @@ export function buildModel(bundle: StoredBundle): AppModel {
       Hjemmel: medarbeiderRow["Hjemmel"] ?? "",
       "Inngår i lønnsoppgjør": medarbeiderRow["Inngår i lønnsoppgjør"] ?? "",
       "Referanseår": refRow["Referanseår"] ?? null,
+      "Referansemåned": referenceMonthCode(refRow["Referanseår"], refRow["ReferansemånedNr"]),
       "Referanselønn": refLonn,
       "Lønnsutvikling kroner": lonnKroner,
       "Lønnsutvikling prosent": lonnKroner !== null && refLonn ? Math.round((lonnKroner / refLonn) * 1000) / 10 : null,

@@ -5,7 +5,8 @@ import type { Row, StoredBundle, UploadFilePatch, UploadFiles } from "./types";
 const REFERENCE_SHEET_NAME = "Referanselønn";
 const REFERENCE_TITLE = "Referanselønn";
 const REFERENCE_HEADER_ROW = 4;
-const REFERENCE_HEADERS = ["navn", "init", "ref_ar", "ref_lonn"];
+const REFERENCE_REQUIRED_HEADERS = ["navn", "init", "ref_ar", "ref_lonn"];
+const REFERENCE_OPTIONAL_HEADERS = ["ref_mnd"];
 
 function cleanCell(value: unknown): unknown {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -61,14 +62,18 @@ function sheetRows(workbook: ExcelJS.Workbook, sheetName: string): Row[] {
 function rowsFromHeaderRow(worksheet: ExcelJS.Worksheet, headerRowNumber: number): Row[] {
   const rows = Array.from({ length: worksheet.rowCount }, (_, index) => rowValues(worksheet, index + 1));
   const headerRow = rows[headerRowNumber - 1] ?? [];
-  const headers = REFERENCE_HEADERS.map((_, index) => String(headerRow[index] ?? "").trim());
-  const invalidHeader = REFERENCE_HEADERS.find((header, index) => headers[index] !== header);
+  const headers = [...REFERENCE_REQUIRED_HEADERS, ...REFERENCE_OPTIONAL_HEADERS].filter((_, index) => headerRow[index]);
+  const invalidHeader = REFERENCE_REQUIRED_HEADERS.find((header, index) => headers[index] !== header);
   if (invalidHeader) {
-    throw new Error(`Referanselønn må ha kolonnene ${REFERENCE_HEADERS.join(", ")} på rad ${headerRowNumber}.`);
+    throw new Error(`Referanselønn må ha kolonnene ${REFERENCE_REQUIRED_HEADERS.join(", ")} på rad ${headerRowNumber}.`);
+  }
+  const invalidOptionalHeader = headers.slice(REFERENCE_REQUIRED_HEADERS.length).find((header) => !REFERENCE_OPTIONAL_HEADERS.includes(header));
+  if (invalidOptionalHeader) {
+    throw new Error(`Referanselønn har ukjent kolonne "${invalidOptionalHeader}" på rad ${headerRowNumber}.`);
   }
   return cleanRows(
     rows.slice(headerRowNumber).map((row) =>
-      Object.fromEntries(REFERENCE_HEADERS.map((header, index) => [header, cleanCell(row[index])])),
+      Object.fromEntries(headers.map((header, index) => [header, cleanCell(row[index])])),
     ),
   );
 }
