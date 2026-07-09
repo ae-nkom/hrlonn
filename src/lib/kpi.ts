@@ -23,16 +23,31 @@ const monthNames: Record<number, string> = {
   12: "desember",
 };
 
+const shortMonthNames: Record<number, string> = {
+  1: "Jan",
+  2: "Feb",
+  3: "Mar",
+  4: "Apr",
+  5: "Mai",
+  6: "Jun",
+  7: "Jul",
+  8: "Aug",
+  9: "Sep",
+  10: "Okt",
+  11: "Nov",
+  12: "Des",
+};
+
 const monthColumnToNumber = new Map(Object.entries(monthNames).map(([number, name]) => [name.toLocaleLowerCase("nb-NO"), Number(number)]));
 
 function periodCode(year: number, month: number): string {
   return `${year}M${String(month).padStart(2, "0")}`;
 }
 
-function periodLabel(code: string): string {
+function shortPeriodLabel(code: string): string {
   const period = parsePeriodCode(code);
   if (!period) return code;
-  return `${monthNames[period.month]} ${period.year}`;
+  return `${shortMonthNames[period.month]} ${String(period.year).slice(-2)}`;
 }
 
 function parsePeriodCode(code: string): { year: number; month: number } | null {
@@ -104,7 +119,7 @@ function kpiRowFromReferencePath(referenceCode: string, targetCode: string, refe
   const targetKpi = kpiValues?.[targetCode] ?? null;
 
   return {
-    Periode: `KPI ${periodLabel(referenceCode)}-${periodLabel(targetCode)}`,
+    Periode: shortPeriodLabel(referenceCode),
     Referansebane: referencePath,
     Referanseår: referencePeriod?.year ?? null,
     ReferansemånedNr: referencePeriod?.month ?? null,

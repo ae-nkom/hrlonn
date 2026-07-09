@@ -113,6 +113,7 @@ const hiddenAppColumns = [
   "Val.7",
   "Hjemmel",
   "Inngår i lønnsoppgjør",
+  "Referansemåned",
   "Ansettelsesår",
   "Stillingskode",
   "koststed",
@@ -133,7 +134,6 @@ const overviewColumnOrder = [
   "Tariff",
   "arslonn",
   "Referanseår",
-  "Referansemåned",
   "Referanselønn",
   "Lønnsutvikling kroner",
   "Lønnsutvikling prosent",
@@ -162,7 +162,6 @@ const developmentTableColumnOrder = [
   "alder",
   "startdato",
   "Referanseår",
-  "Referansemåned",
   "Referanselønn",
   "arslonn",
   "Lønnsutvikling prosent",
@@ -812,7 +811,7 @@ function SourceTabs({ bundle }: { bundle: StoredBundle }) {
     avdelingsdata_raw: "Avdelingsdata",
     kpi: "KPI",
   };
-  const kpiHiddenColumns = ["Referanseår", "Referansemåned", "Sluttmåned", "_kpi_referanse", "_kpi_slutt", "Målår", "Målmåned"];
+  const kpiHiddenColumns = ["Referanseår", "Referansemåned", "ReferansemånedNr", "Sluttmåned", "_kpi_referanse", "_kpi_slutt", "Målår", "Målmåned"];
   const exportFilename = `${labels[active]}.xlsx`;
   return (
     <div className="source-tabs">
