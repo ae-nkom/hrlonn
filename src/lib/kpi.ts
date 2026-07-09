@@ -103,8 +103,13 @@ function kpiRowFromReferencePath(year: number, targetYear: number, targetMonth: 
 
 function fallbackKpiRows(refYears: number[], targetYear: number, targetMonth: number): Row[] | null {
   if (targetYear !== 2026 || targetMonth !== 5) return null;
-  if (refYears.some((year) => !fallbackKpiReferencePaths2026.has(year))) return null;
-  return refYears.map((year) => kpiRowFromReferencePath(year, targetYear, targetMonth, fallbackKpiReferencePaths2026.get(year) ?? 0, "fallback"));
+  const coveredYears = refYears.filter((year) => fallbackKpiReferencePaths2026.has(year));
+  if (coveredYears.length === 0) return null;
+  return coveredYears.map((year) => kpiRowFromReferencePath(year, targetYear, targetMonth, fallbackKpiReferencePaths2026.get(year) ?? 0, "fallback"));
+}
+
+function kpiFallbackError(targetYear: number) {
+  return new Error(`Klarte ikke hente KPI fra SSB. Lokalt fallbackgrunnlag finnes bare for målår 2026, men valgt målår er ${targetYear}.`);
 }
 
 export async function buildKpiRows(referanselonn: Row[], targetYear = new Date().getFullYear()): Promise<Row[]> {
@@ -128,6 +133,7 @@ export async function buildKpiRows(referanselonn: Row[], targetYear = new Date()
   } catch (err) {
     const fallbackRows = fallbackKpiRows(refYears, targetYear, targetMonth);
     if (fallbackRows) return fallbackRows;
+    if (targetYear !== 2026) throw kpiFallbackError(targetYear);
     throw err;
   }
 
@@ -139,6 +145,7 @@ export async function buildKpiRows(referanselonn: Row[], targetYear = new Date()
   if (!Number.isFinite(targetKpi) || !Number.isFinite(januaryKpi)) {
     const fallbackRows = fallbackKpiRows(refYears, targetYear, targetMonth);
     if (fallbackRows) return fallbackRows;
+    if (targetYear !== 2026) throw kpiFallbackError(targetYear);
     throw new Error("SSB-responsen mangler forventede KPI-verdier");
   }
 
@@ -148,6 +155,7 @@ export async function buildKpiRows(referanselonn: Row[], targetYear = new Date()
   if (missingReferenceCode) {
     const fallbackRows = fallbackKpiRows(refYears, targetYear, targetMonth);
     if (fallbackRows) return fallbackRows;
+    if (targetYear !== 2026) throw kpiFallbackError(targetYear);
     throw new Error(`SSB-responsen mangler KPI-verdi for ${missingReferenceCode}`);
   }
 
