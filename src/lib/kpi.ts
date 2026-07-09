@@ -176,11 +176,12 @@ function kpiFallbackError(targetYear: number) {
 export async function buildKpiRows(_referanselonn: Row[], targetYear = new Date().getFullYear()): Promise<Row[]> {
   const targetMonth = TARGET_MONTH;
   const targetCode = periodCode(targetYear, targetMonth);
-  const referenceCodes = monthlyPeriodCodes(REFERENCE_START_YEAR, REFERENCE_START_MONTH, targetYear, targetMonth);
+  const requestedCodes = monthlyPeriodCodes(REFERENCE_START_YEAR, REFERENCE_START_MONTH, targetYear, targetMonth);
+  const referenceCodes = requestedCodes.filter((code) => code !== targetCode);
 
   let data: SsbJsonStat;
   try {
-    data = await fetchJson<SsbJsonStat>(kpiDataUrl(referenceCodes));
+    data = await fetchJson<SsbJsonStat>(kpiDataUrl(requestedCodes));
   } catch (err) {
     if (targetYear !== 2026 || targetMonth !== 5) throw kpiFallbackError(targetYear);
     return kpiRowsFromValues(referenceCodes, targetCode, "fallback", fallbackKpiValuesFromCsv());

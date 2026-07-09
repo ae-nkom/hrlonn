@@ -811,7 +811,7 @@ function SourceTabs({ bundle }: { bundle: StoredBundle }) {
     avdelingsdata_raw: "Avdelingsdata",
     kpi: "KPI",
   };
-  const kpiHiddenColumns = ["Referanseår", "Referansemåned", "ReferansemånedNr", "Sluttmåned", "_kpi_referanse", "_kpi_slutt", "Målår", "Målmåned"];
+  const kpiHiddenColumns = ["Referanseår", "Referansemåned", "ReferansemånedNr", "Sluttmåned", "_kpi_referanse", "_kpi_slutt", "_kpi_kilde", "Målår", "Målmåned"];
   const exportFilename = `${labels[active]}.xlsx`;
   return (
     <div className="source-tabs">
