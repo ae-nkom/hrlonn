@@ -1,10 +1,9 @@
 import { toInt } from "./format";
+import { referencePeriodFromCode, referenceSalary } from "./referencePeriod";
 import type { Row, StoredBundle } from "./types";
 import fallbackKpiCsv from "../../data/kpi_historie.csv?raw";
 
 const SSB_KPI_DATA_URL = "https://data.ssb.no/api/pxwebapi/v2/tables/14700/data";
-const REFERENCE_START_YEAR = 2021;
-const REFERENCE_START_MONTH = 5;
 const TARGET_MONTH = 5;
 const KPI_FETCH_TIMEOUT_MS = 20_000;
 
@@ -45,18 +44,9 @@ function periodCode(year: number, month: number): string {
 }
 
 function shortPeriodLabel(code: string): string {
-  const period = parsePeriodCode(code);
+  const period = referencePeriodFromCode(code);
   if (!period) return code;
   return `${shortMonthNames[period.month]} ${String(period.year).slice(-2)}`;
-}
-
-function parsePeriodCode(code: string): { year: number; month: number } | null {
-  const match = code.match(/^(\d{4})M(\d{2})$/);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
-  return { year, month };
 }
 
 function monthlyPeriodCodes(startYear: number, startMonth: number, endYear: number, endMonth: number): string[] {
@@ -70,6 +60,27 @@ function monthlyPeriodCodes(startYear: number, startMonth: number, endYear: numb
     }
   }
   return codes;
+}
+
+function requestedPeriodCodes(referanselonn: Row[], targetYear: number): string[] {
+  const periods = referanselonn.map((row, index) => {
+    const reference = referenceSalary(row);
+    if (!reference) {
+      throw new Error(`Referanselønn rad ${index + 1} mangler gyldig ref_ar og ref_mnd.`);
+    }
+    return reference.period;
+  });
+  if (periods.length === 0) return [];
+
+  const targetCode = periodCode(targetYear, TARGET_MONTH);
+  const latestReference = periods.reduce((latest, period) => period.code > latest.code ? period : latest);
+  if (latestReference.code > targetCode) {
+    throw new Error(
+      `Referanseperioden ${latestReference.code} er senere enn KPI-målperioden ${targetCode}.`,
+    );
+  }
+  const earliestReference = periods.reduce((earliest, period) => period.code < earliest.code ? period : earliest);
+  return monthlyPeriodCodes(earliestReference.year, earliestReference.month, targetYear, TARGET_MONTH);
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -113,8 +124,8 @@ function kpiDataUrl(periodCodes: string[]) {
 }
 
 function kpiRowFromReferencePath(referenceCode: string, targetCode: string, referencePath: number, source: "ssb" | "fallback", kpiValues?: Record<string, number>): Row {
-  const referencePeriod = parsePeriodCode(referenceCode);
-  const targetPeriod = parsePeriodCode(targetCode);
+  const referencePeriod = referencePeriodFromCode(referenceCode);
+  const targetPeriod = referencePeriodFromCode(targetCode);
   const referenceKpi = kpiValues?.[referenceCode] ?? null;
   const targetKpi = kpiValues?.[targetCode] ?? null;
 
@@ -173,11 +184,12 @@ function kpiFallbackError(targetYear: number) {
   return new Error(`Klarte ikke hente KPI fra SSB. Lokalt fallbackgrunnlag finnes bare til og med mai 2026, men valgt målår er ${targetYear}.`);
 }
 
-export async function buildKpiRows(_referanselonn: Row[], targetYear = new Date().getFullYear()): Promise<Row[]> {
+export async function buildKpiRows(referanselonn: Row[], targetYear = new Date().getFullYear()): Promise<Row[]> {
   const targetMonth = TARGET_MONTH;
   const targetCode = periodCode(targetYear, targetMonth);
-  const requestedCodes = monthlyPeriodCodes(REFERENCE_START_YEAR, REFERENCE_START_MONTH, targetYear, targetMonth);
-  const referenceCodes = requestedCodes.filter((code) => code !== targetCode);
+  const requestedCodes = requestedPeriodCodes(referanselonn, targetYear);
+  if (requestedCodes.length === 0) return [];
+  const referenceCodes = requestedCodes;
 
   let data: SsbJsonStat;
   try {
@@ -219,7 +231,7 @@ export function kpiDatasetNeedsRefresh(bundle: StoredBundle, now = new Date()): 
   const rows = bundle.tables.kpi ?? [];
   if (rows.length === 0) return (bundle.tables.referanselonn ?? []).length > 0;
   const targetYear = now.getFullYear();
-  const expectedCodes = monthlyPeriodCodes(REFERENCE_START_YEAR, REFERENCE_START_MONTH, targetYear, TARGET_MONTH);
+  const expectedCodes = requestedPeriodCodes(bundle.tables.referanselonn ?? [], targetYear);
   const existingCodes = new Set(rows.map((row) => String(row["Referansemåned"] ?? "")));
   return rows.some((row) => toInt(row["Målår"]) !== targetYear) || expectedCodes.some((code) => !existingCodes.has(code));
 }

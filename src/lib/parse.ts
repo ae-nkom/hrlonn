@@ -1,12 +1,10 @@
 import ExcelJS from "exceljs";
 import { normalizeRows } from "./columns";
+import { referenceSalary } from "./referencePeriod";
 import type { Row, StoredBundle, UploadFilePatch, UploadFiles } from "./types";
 
-const REFERENCE_SHEET_NAME = "Referanselønn";
-const REFERENCE_TITLE = "Referanselønn";
-const REFERENCE_HEADER_ROW = 4;
-const REFERENCE_REQUIRED_HEADERS = ["navn", "init", "ref_ar", "ref_lonn"];
-const REFERENCE_OPTIONAL_HEADERS = ["ref_mnd"];
+const REFERENCE_SHEET_NAMES = new Set(["referanselonn", "referanselønn"]);
+const REFERENCE_HEADERS = ["navn", "init", "ref_ar", "ref_mnd", "ref_lonn"];
 
 function cleanCell(value: unknown): unknown {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -59,18 +57,8 @@ function sheetRows(workbook: ExcelJS.Workbook, sheetName: string): Row[] {
   );
 }
 
-function rowsFromHeaderRow(worksheet: ExcelJS.Worksheet, headerRowNumber: number): Row[] {
+function rowsFromHeaderRow(worksheet: ExcelJS.Worksheet, headerRowNumber: number, headers: string[]): Row[] {
   const rows = Array.from({ length: worksheet.rowCount }, (_, index) => rowValues(worksheet, index + 1));
-  const headerRow = rows[headerRowNumber - 1] ?? [];
-  const headers = [...REFERENCE_REQUIRED_HEADERS, ...REFERENCE_OPTIONAL_HEADERS].filter((_, index) => headerRow[index]);
-  const invalidHeader = REFERENCE_REQUIRED_HEADERS.find((header, index) => headers[index] !== header);
-  if (invalidHeader) {
-    throw new Error(`Referanselønn må ha kolonnene ${REFERENCE_REQUIRED_HEADERS.join(", ")} på rad ${headerRowNumber}.`);
-  }
-  const invalidOptionalHeader = headers.slice(REFERENCE_REQUIRED_HEADERS.length).find((header) => !REFERENCE_OPTIONAL_HEADERS.includes(header));
-  if (invalidOptionalHeader) {
-    throw new Error(`Referanselønn har ukjent kolonne "${invalidOptionalHeader}" på rad ${headerRowNumber}.`);
-  }
   return cleanRows(
     rows.slice(headerRowNumber).map((row) =>
       Object.fromEntries(headers.map((header, index) => [header, cleanCell(row[index])])),
@@ -79,12 +67,51 @@ function rowsFromHeaderRow(worksheet: ExcelJS.Worksheet, headerRowNumber: number
 }
 
 function referenceSalaryRows(workbook: ExcelJS.Workbook): Row[] {
-  const worksheet = getWorksheet(workbook, REFERENCE_SHEET_NAME);
-  const title = cleanCell(worksheet.getRow(1).getCell(1).value);
-  if (title !== REFERENCE_TITLE) {
-    throw new Error(`Referanselønn må være en Excel-fil eksportert med "${REFERENCE_TITLE}" i celle A1.`);
+  const worksheet = workbook.worksheets.find(
+    (candidate) => REFERENCE_SHEET_NAMES.has(candidate.name.toLocaleLowerCase("nb-NO")),
+  );
+  if (!worksheet) {
+    throw new Error('Mangler arkfanen "referanselonn" eller "Referanselønn".');
   }
-  return rowsFromHeaderRow(worksheet, REFERENCE_HEADER_ROW);
+
+  const headerRowNumber = Array.from({ length: Math.min(10, worksheet.rowCount) }, (_, index) => index + 1)
+    .find((rowNumber) => String(cleanCell(worksheet.getRow(rowNumber).getCell(1).value) ?? "").trim() === "navn");
+  if (!headerRowNumber) {
+    throw new Error(`Referanselønn må ha kolonnene ${REFERENCE_HEADERS.join(", ")} i én av de ti første radene.`);
+  }
+
+  const actualHeaders = REFERENCE_HEADERS.map((_, index) =>
+    String(cleanCell(worksheet.getRow(headerRowNumber).getCell(index + 1).value) ?? "").trim(),
+  );
+  if (actualHeaders.some((header, index) => header !== REFERENCE_HEADERS[index])) {
+    throw new Error(
+      `Referanselønn må ha kolonnene ${REFERENCE_HEADERS.join(", ")} i denne rekkefølgen på rad ${headerRowNumber}.`,
+    );
+  }
+
+  const parsedRows = rowsFromHeaderRow(worksheet, headerRowNumber, REFERENCE_HEADERS)
+    .filter((row) => REFERENCE_HEADERS.some((header) => row[header] !== null && row[header] !== ""));
+  const seenInitials = new Set<string>();
+  return parsedRows.map((row, index) => {
+    const excelRow = headerRowNumber + index + 1;
+    const reference = referenceSalary(row);
+    if (!reference) {
+      throw new Error(
+        `Ugyldig rad ${excelRow} i Referanselønn. navn og init må være utfylt, ref_ar må være et år, ref_mnd må være 1–12, og ref_lonn må være større enn 0.`,
+      );
+    }
+    if (seenInitials.has(reference.initials)) {
+      throw new Error(`Initialene ${reference.initials} finnes flere ganger i Referanselønn.`);
+    }
+    seenInitials.add(reference.initials);
+    return {
+      navn: reference.name,
+      init: reference.initials,
+      ref_ar: reference.period.year,
+      ref_mnd: reference.period.month,
+      ref_lonn: reference.salary,
+    };
+  });
 }
 
 function sheetMatrix(workbook: ExcelJS.Workbook, sheetName: string): Row[] {
@@ -109,7 +136,7 @@ export async function parseUploadFiles(files: UploadFiles): Promise<StoredBundle
   const avdelingsdataRaw = sheetMatrix(manualWorkbook, "Avdelingsdata");
 
   return {
-    version: 1,
+    version: 2,
     createdAt: new Date().toISOString(),
     sources: {
       sap_raw: { name: files.sap.name, role: "SAP-rådata", size: files.sap.size },

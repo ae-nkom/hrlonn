@@ -8,7 +8,7 @@ export function loadStoredBundle(): StoredBundle | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as StoredBundle;
-    if (parsed.version !== 1 || !parsed.tables) return null;
+    if (parsed.version !== 2 || !parsed.tables) return null;
     const migrated = normalizeStoredBundle(parsed);
     if (JSON.stringify(migrated.tables) !== JSON.stringify(parsed.tables)) {
       saveStoredBundle(migrated);

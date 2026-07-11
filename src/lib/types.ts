@@ -15,7 +15,7 @@ export type SourceInfo = {
 };
 
 export type StoredBundle = {
-  version: 1;
+  version: 2;
   createdAt: string;
   sources: Record<string, SourceInfo>;
   tables: Record<TableName, Row[]>;

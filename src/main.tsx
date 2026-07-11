@@ -113,7 +113,6 @@ const hiddenAppColumns = [
   "Val.7",
   "Hjemmel",
   "Inngår i lønnsoppgjør",
-  "Referansemåned",
   "Ansettelsesår",
   "Stillingskode",
   "koststed",
@@ -134,6 +133,7 @@ const overviewColumnOrder = [
   "Tariff",
   "arslonn",
   "Referanseår",
+  "Referansemåned",
   "Referanselønn",
   "Lønnsutvikling kroner",
   "Lønnsutvikling prosent",
@@ -162,6 +162,7 @@ const developmentTableColumnOrder = [
   "alder",
   "startdato",
   "Referanseår",
+  "Referansemåned",
   "Referanselønn",
   "arslonn",
   "Lønnsutvikling prosent",
@@ -580,7 +581,10 @@ function App() {
               startLabelFormatter={(item) => {
                 if (item.value <= 30_000) return "";
                 const referenceYear = item.row?.["Referanseår"];
-                return referenceYear ? `Referanseår = ${referenceYear}` : "";
+                const referenceMonth = item.row?.["Referansemåned"];
+                return referenceYear && referenceMonth
+                  ? `Referanse = ${String(referenceMonth).padStart(2, "0")}.${referenceYear}`
+                  : "";
               }}
               valueLabelWidth={96}
               color="#2f7d55"
@@ -812,6 +816,14 @@ function SourceTabs({ bundle }: { bundle: StoredBundle }) {
     kpi: "KPI",
   };
   const kpiHiddenColumns = ["Referanseår", "Referansemåned", "ReferansemånedNr", "Sluttmåned", "_kpi_referanse", "_kpi_slutt", "_kpi_kilde", "Målår", "Målmåned"];
+  const referenceColumnLabels = {
+    ref_ar: "Referanseår",
+    ref_mnd: "Referansemåned",
+    ref_lonn: "Referanselønn",
+  };
+  const visibleKpiRows = bundle.tables.kpi.filter(
+    (row) => row["Referansemåned"] !== row["Sluttmåned"],
+  );
   const exportFilename = `${labels[active]}.xlsx`;
   return (
     <div className="source-tabs">
@@ -825,7 +837,16 @@ function SourceTabs({ bundle }: { bundle: StoredBundle }) {
       {active === "avdelingsdata_raw" ? (
         <DepartmentMatrix rows={bundle.tables.avdelingsdata_raw} exportFilename={exportFilename} />
       ) : active === "kpi" ? (
-        <DataTable rows={bundle.tables.kpi} title={labels[active]} height={650} hiddenColumns={kpiHiddenColumns} columnOrder={["Periode", "Referansebane"]} exportFilename={exportFilename} />
+        <DataTable rows={visibleKpiRows} title={labels[active]} height={650} hiddenColumns={kpiHiddenColumns} columnOrder={["Periode", "Referansebane"]} exportFilename={exportFilename} />
+      ) : active === "referanselonn" ? (
+        <DataTable
+          rows={bundle.tables.referanselonn}
+          title={labels[active]}
+          height={650}
+          columnOrder={["navn", "init", "ref_ar", "ref_mnd", "ref_lonn"]}
+          columnLabels={referenceColumnLabels}
+          exportFilename={exportFilename}
+        />
       ) : (
         <DataTable rows={bundle.tables[active]} title={labels[active]} height={650} hiddenColumns={hiddenAppColumns} columnWidths={columnWidths} exportFilename={exportFilename} />
       )}
